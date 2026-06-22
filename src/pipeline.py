@@ -1,0 +1,103 @@
+# Pipeline entry point — see spec/spec.md §4 for full agent wiring and HITL behavior
+import select
+import sys
+from uuid import uuid4
+
+from dotenv import load_dotenv
+from langfuse import get_client, observe
+from rich.console import Console
+from rich.panel import Panel
+
+from src.agents.analyzer import analyzer_agent
+from src.agents.reporter import reporter_agent
+from src.agents.reviewer import reviewer_agent
+from src.models import PipelineState
+from src.tools.github import get_pr_metadata, post_pr_comment, validate_diff
+from src.tools.trace import log_structured_trace
+from src.utils import setup_langfuse_tracing
+
+load_dotenv()
+
+console = Console()
+langfuse = get_client()
+
+HITL_TIMEOUT_SECONDS = 60
+
+
+def human_approval_gate(state: PipelineState) -> bool:
+    console.print(Panel(state.draft_comment, title="DRAFT REVIEW COMMENT", border_style="yellow"))
+    console.print(f"\nPost this comment to PR #{state.metadata.pr_number}? [y/n] ", end="")
+
+    ready, _, _ = select.select([sys.stdin], [], [], HITL_TIMEOUT_SECONDS)
+    if not ready:
+        console.print("\n[yellow]Timeout — treating as abort.[/yellow]")
+        return False
+
+    answer = sys.stdin.readline().strip().lower()
+    return answer == "y"
+
+
+@observe(name="pr_review_pipeline")
+def run(pr_url: str) -> PipelineState:
+    state = PipelineState(pr_url=pr_url, run_id=str(uuid4()))
+
+    # Agent 1: Analyzer
+    metadata = get_pr_metadata(pr_url)
+    metadata = metadata.model_copy(update={"diff": validate_diff(metadata.diff)})
+    result = analyzer_agent.run(str(metadata.model_dump()))
+    state.metadata = metadata
+    state.classification = result.content
+
+    # Agent 2: Reviewer — model resolved from risk level at runtime
+    from agno.models.litellm import LiteLLM
+    reviewer_agent.model = LiteLLM(id=state.classification.model_to_use)
+    findings_result = reviewer_agent.run(
+        f"Metadata: {state.metadata.model_dump_json()}\n"
+        f"Classification: {state.classification.model_dump_json()}"
+    )
+    state.findings = findings_result.content
+
+    # Agent 3: Reporter — produces draft comment
+    draft_result = reporter_agent.run(
+        f"Metadata: {state.metadata.model_dump_json()}\n"
+        f"Findings: {state.findings.model_dump_json()}"
+    )
+    state.draft_comment = draft_result.content
+
+    # HITL gate
+    approved = human_approval_gate(state)
+    try:
+        langfuse.score_current_trace(name="human-approval", value=1 if approved else 0)
+    except Exception:
+        pass
+
+    if not approved:
+        state.human_approved = False
+        log_structured_trace(state)
+        console.print("[red]Aborted — nothing posted.[/red]")
+        langfuse.flush()
+        return state
+
+    state.posted_comment_url = post_pr_comment(
+        state.metadata.repo, state.metadata.pr_number, state.draft_comment
+    )
+    state.human_approved = True
+    log_structured_trace(state)
+
+    risk = state.classification.risk_level.value
+    n = len(state.findings.findings)
+    cost = state.total_cost_usd
+    console.print(
+        f"✓ Run {state.run_id} | Risk: {risk} | Findings: {n} | "
+        f"Cost: ${cost:.4f} | Status: posted"
+    )
+    langfuse.flush()
+    return state
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        console.print("Usage: uv run python -m src.pipeline <github-pr-url>")
+        sys.exit(1)
+    setup_langfuse_tracing()
+    run(sys.argv[1])
