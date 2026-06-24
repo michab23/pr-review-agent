@@ -1,0 +1,15 @@
+{
+  "id": "high-001",
+  "description": "New auth endpoint using MD5 password hashing and hardcoded JWT secret",
+  "pr_diff": "diff --git a/src/api/auth.py b/src/api/auth.py\nnew file mode 100644\nindex 0000000..a1b2c3d\n--- /dev/null\n+++ b/src/api/auth.py\n@@ -0,0 +1,55 @@\n+import hashlib\n+import jwt\n+import datetime\n+from fastapi import APIRouter, HTTPException\n+from pydantic import BaseModel\n+\n+router = APIRouter(prefix=\"/auth\")\n+\n+JWT_SECRET = \"supersecretkey123\"\n+JWT_ALGORITHM = \"HS256\"\n+\n+USERS = {\n+    \"admin\": hashlib.md5(b\"admin123\").hexdigest(),\n+    \"user1\": hashlib.md5(b\"password\").hexdigest(),\n+}\n+\n+\n+class LoginRequest(BaseModel):\n+    username: str\n+    password: str\n+\n+\n+@router.post(\"/login\")\n+def login(request: LoginRequest) -> dict:\n+    hashed = hashlib.md5(request.password.encode()).hexdigest()\n+    if request.username not in USERS or USERS[request.username] != hashed:\n+        raise HTTPException(status_code=401, detail=\"Invalid credentials\")\n+\n+    payload = {\n+        \"sub\": request.username,\n+        \"iat\": datetime.datetime.utcnow(),\n+    }\n+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)\n+    return {\"access_token\": token, \"token_type\": \"bearer\"}\n+\n+\n+@router.post(\"/change-password\")\n+def change_password(username: str, old_password: str, new_password: str) -> dict:\n+    old_hashed = hashlib.md5(old_password.encode()).hexdigest()\n+    if username not in USERS or USERS[username] != old_hashed:\n+        raise HTTPException(status_code=403, detail=\"Forbidden\")\n+    USERS[username] = hashlib.md5(new_password.encode()).hexdigest()\n+    return {\"status\": \"password changed\"}\n",
+  "files_changed": ["src/api/auth.py"],
+  "expected_risk_level": "high",
+  "expected_change_types": ["feature", "security"],
+  "planted_issues": [
+    "MD5 used for password hashing — cryptographically broken (security.md § Password Handling)",
+    "JWT_SECRET hardcoded in source — must be loaded from environment variable (security.md § Secret Management)",
+    "JWT token has no expiry (exp claim) — violates 24-hour access token rule (security.md § JWT and Session Tokens)",
+    "Passwords stored in in-memory dict — lost on restart, no database persistence",
+    "Return type annotated as dict instead of a Pydantic model (python.md § Pydantic Models)"
+  ]
+}

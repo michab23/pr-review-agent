@@ -64,8 +64,15 @@ def validate_diff(diff: str) -> str:
 
 def post_pr_comment(repo: str, pr_number: int, body: str) -> str:
     """Post a review comment to a GitHub PR. Returns the comment URL."""
+    from github import GithubException
+
     token = os.environ["GITHUB_TOKEN"]
     gh = Github(token)
-    issue = gh.get_repo(repo).get_issue(pr_number)
-    comment = issue.create_comment(body)
+    try:
+        issue = gh.get_repo(repo).get_issue(pr_number)
+        comment = issue.create_comment(body)
+    except GithubException as e:
+        status = e.status
+        msg = e.data.get("message", str(e)) if isinstance(e.data, dict) else str(e)
+        raise RuntimeError(f"GitHub {status}: {msg}") from None
     return comment.html_url

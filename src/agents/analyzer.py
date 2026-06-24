@@ -24,7 +24,7 @@ RISK_MODEL_MAP = {
 
 analyzer_agent = Agent(
     name="analyzer",
-    model=LiteLLM(id="anthropic/claude-haiku-4-5-20251001"),
-    response_model=PRClassification,
+    model=LiteLLM(id="anthropic/claude-haiku-4-5-20251001", top_p=None),
+    output_schema=PRClassification,
     instructions=ANALYZER_SYSTEM_PROMPT,
 )

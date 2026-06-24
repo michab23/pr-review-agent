@@ -1,0 +1,9 @@
+{
+  "id": "medium-003",
+  "description": "Add httpx and tenacity dependencies for retry logic",
+  "pr_diff": "diff --git a/pyproject.toml b/pyproject.toml\nindex b2c3d4e..c3d4e5f 100644\n--- a/pyproject.toml\n+++ b/pyproject.toml\n@@ -6,6 +6,8 @@ dependencies = [\n     \"agno>=1.0\",\n     \"litellm>=1.0\",\n+    \"httpx>=0.27\",\n+    \"tenacity>=8.0\",\n     \"langfuse>=2.0\",\n     \"pydantic>=2.0\",\ndiff --git a/src/tools/github.py b/src/tools/github.py\nindex a1b2c3d..b2c3d4e 100644\n--- a/src/tools/github.py\n+++ b/src/tools/github.py\n@@ -1,6 +1,8 @@\n import os\n import re\n+import httpx\n+from tenacity import retry, stop_after_attempt, wait_exponential\n from github import Github\n from src.models import PRMetadata\n \n+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))\n def get_pr_metadata(url: str) -> PRMetadata:\n     \"\"\"Fetch PR metadata and diff from GitHub. Rejects diffs > 100KB.\"\"\"\n",
+  "files_changed": ["pyproject.toml", "src/tools/github.py"],
+  "expected_risk_level": "medium",
+  "expected_change_types": ["dependency"],
+  "planted_issues": []
+}

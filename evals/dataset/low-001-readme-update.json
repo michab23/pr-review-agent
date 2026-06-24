@@ -1,0 +1,9 @@
+{
+  "id": "low-001",
+  "description": "README update with quickstart instructions",
+  "pr_diff": "diff --git a/README.md b/README.md\nindex a1b2c3d..e4f5a6b 100644\n--- a/README.md\n+++ b/README.md\n@@ -1,5 +1,30 @@\n # pr-review-agent\n \n-A multi-agent PR review system.\n+A multi-agent PR review system powered by Anthropic Claude.\n+\n+## Quickstart\n+\n+1. Clone the repo\n+2. Copy `.env.example` to `.env` and fill in your keys\n+3. Install dependencies: `uv sync`\n+4. Run a review: `uv run python -m src.pipeline https://github.com/owner/repo/pull/N`\n+\n+## Required Environment Variables\n+\n+| Variable | Description |\n+|---|---|\n+| `ANTHROPIC_API_KEY` | Anthropic API key for Claude models |\n+| `GITHUB_TOKEN` | GitHub PAT with `pull_requests:write` scope |\n+| `LANGFUSE_PUBLIC_KEY` | LangFuse observability public key |\n+| `LANGFUSE_SECRET_KEY` | LangFuse observability secret key |\n+| `LANGFUSE_HOST` | LangFuse host (default: `https://cloud.langfuse.com`) |\n+\n+## Architecture\n+\n+Three agents run sequentially:\n+- **Analyzer**: classifies PR risk (low/medium/high) and selects model tier\n+- **Reviewer**: retrieves team standards via MCP and generates structured findings\n+- **Reporter**: formats comment, presents HITL gate, posts to GitHub on approval\n",
+  "files_changed": ["README.md"],
+  "expected_risk_level": "low",
+  "expected_change_types": ["docs"],
+  "planted_issues": []
+}

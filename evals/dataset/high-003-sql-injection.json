@@ -1,0 +1,14 @@
+{
+  "id": "high-003",
+  "description": "Add PR history lookup with SQL string concatenation and no input validation",
+  "pr_diff": "diff --git a/src/tools/history.py b/src/tools/history.py\nnew file mode 100644\nindex 0000000..c3d4e5f\n--- /dev/null\n+++ b/src/tools/history.py\n@@ -0,0 +1,45 @@\n+import sqlite3\n+import os\n+\n+DB_PATH = os.getenv(\"HISTORY_DB\", \"reviews.db\")\n+\n+\n+def init_db():\n+    conn = sqlite3.connect(DB_PATH)\n+    conn.execute(\"\"\"\n+        CREATE TABLE IF NOT EXISTS reviews (\n+            id INTEGER PRIMARY KEY AUTOINCREMENT,\n+            pr_url TEXT NOT NULL,\n+            risk_level TEXT,\n+            verdict TEXT,\n+            cost REAL,\n+            reviewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n+        )\n+    \"\"\")\n+    conn.commit()\n+    conn.close()\n+\n+\n+def get_reviews_for_repo(repo_name: str):\n+    \"\"\"Fetch all past reviews for a given repository.\"\"\"\n+    conn = sqlite3.connect(DB_PATH)\n+    cursor = conn.cursor()\n+    query = \"SELECT * FROM reviews WHERE pr_url LIKE '%\" + repo_name + \"%'\"\n+    cursor.execute(query)\n+    rows = cursor.fetchall()\n+    conn.close()\n+    return rows\n+\n+\n+def save_review(pr_url: str, risk_level: str, verdict: str, cost: float):\n+    conn = sqlite3.connect(DB_PATH)\n+    conn.execute(\n+        \"INSERT INTO reviews (pr_url, risk_level, verdict, cost) VALUES (?, ?, ?, ?)\",\n+        (pr_url, risk_level, verdict, cost)\n+    )\n+    conn.commit()\n+    conn.close()\n",
+  "files_changed": ["src/tools/history.py"],
+  "expected_risk_level": "high",
+  "expected_change_types": ["feature", "security"],
+  "planted_issues": [
+    "SQL string concatenation in get_reviews_for_repo — classic SQL injection vector (security.md § SQL and Query Safety)",
+    "Database connections opened without context manager — connection leak if exception occurs (python.md § File Operations)",
+    "get_reviews_for_repo missing type annotations on parameter and return type (python.md § Type Hints)",
+    "save_review missing return type annotation (python.md § Type Hints)"
+  ]
+}

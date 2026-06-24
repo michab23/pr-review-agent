@@ -1,0 +1,14 @@
+{
+  "id": "medium-002",
+  "description": "Refactor: extract diff parsing into its own module — bare except, os.path usage",
+  "pr_diff": "diff --git a/src/tools/diff_parser.py b/src/tools/diff_parser.py\nnew file mode 100644\nindex 0000000..b2c3d4e\n--- /dev/null\n+++ b/src/tools/diff_parser.py\n@@ -0,0 +1,35 @@\n+import os\n+import re\n+\n+\n+def parse_diff_files(diff: str):\n+    \"\"\"Extract filenames from a unified diff string.\"\"\"\n+    files = []\n+    for line in diff.splitlines():\n+        if line.startswith(\"diff --git\"):\n+            # Extract b/ path\n+            match = re.search(r\"b/(.+)$\", line)\n+            if match:\n+                files.append(match.group(1))\n+    return files\n+\n+\n+def count_diff_lines(diff_path: str):\n+    \"\"\"Count added/removed lines in a diff file on disk.\"\"\"\n+    added = 0\n+    removed = 0\n+    try:\n+        content = open(os.path.join(os.getcwd(), diff_path)).read()\n+        for line in content.splitlines():\n+            if line.startswith(\"+\") and not line.startswith(\"+++\"):\n+                added += 1\n+            elif line.startswith(\"-\") and not line.startswith(\"---\"):\n+                removed += 1\n+    except:\n+        pass\n+    return {\"added\": added, \"removed\": removed}\ndiff --git a/src/tools/github.py b/src/tools/github.py\nindex c3d4e5f..d4e5f6a 100644\n--- a/src/tools/github.py\n+++ b/src/tools/github.py\n@@ -44,6 +44,8 @@ def get_pr_metadata(url: str) -> PRMetadata:\n+    from src.tools.diff_parser import parse_diff_files\n+    files_changed = parse_diff_files(diff)\n",
+  "files_changed": ["src/tools/diff_parser.py", "src/tools/github.py"],
+  "expected_risk_level": "medium",
+  "expected_change_types": ["refactor"],
+  "planted_issues": [
+    "Bare except: in count_diff_lines silently swallows all exceptions (python.md § Error Handling)",
+    "os.path.join used instead of pathlib.Path (python.md § File Operations)",
+    "open() used without context manager — file handle may leak (python.md § File Operations)",
+    "parse_diff_files missing return type annotation (python.md § Type Hints)"
+  ]
+}

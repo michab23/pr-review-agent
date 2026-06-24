@@ -24,6 +24,7 @@ def log_structured_trace(state: PipelineState) -> None:
         "human_approved": state.human_approved,
         "total_cost_usd": state.total_cost_usd,
         "models_used": [state.classification.model_to_use] if state.classification else [],
+        "error": state.error,
         "langfuse_trace_url": None,  # populated after flush
     }
 

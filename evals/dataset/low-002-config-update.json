@@ -1,0 +1,9 @@
+{
+  "id": "low-002",
+  "description": "pyproject.toml: add ruff lint rule and bump rich version",
+  "pr_diff": "diff --git a/pyproject.toml b/pyproject.toml\nindex b2c3d4e..f5a6b7c 100644\n--- a/pyproject.toml\n+++ b/pyproject.toml\n@@ -6,7 +6,7 @@ dependencies = [\n     \"agno>=1.0\",\n     \"litellm>=1.0\",\n     \"langfuse>=2.0\",\n     \"pydantic>=2.0\",\n     \"fastmcp>=0.4\",\n     \"PyGithub>=2.0\",\n     \"python-dotenv>=1.0\",\n     \"deepeval>=1.0\",\n-    \"rich>=13.0\",\n+    \"rich>=13.7\",\n ]\n \n [tool.ruff]\n line-length = 100\n+\n+[tool.ruff.lint]\n+select = [\"E\", \"F\", \"I\", \"UP\"]\n+ignore = [\"E501\"]\n",
+  "files_changed": ["pyproject.toml"],
+  "expected_risk_level": "low",
+  "expected_change_types": ["config"],
+  "planted_issues": []
+}

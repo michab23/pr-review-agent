@@ -1,0 +1,9 @@
+{
+  "id": "low-003",
+  "description": "Add missing docstrings to utility functions",
+  "pr_diff": "diff --git a/src/utils.py b/src/utils.py\nindex c3d4e5f..a6b7c8d 100644\n--- a/src/utils.py\n+++ b/src/utils.py\n@@ -1,8 +1,14 @@\n import os\n from langfuse import get_client\n \n \n def setup_langfuse_tracing() -> None:\n+    \"\"\"Initialise LangFuse SDK from env vars.\n+\n+    Reads LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_HOST from the environment.\n+    Raises RuntimeError if any required variable is missing.\n+    Call once in __main__ before any agent runs.\n+    \"\"\"\n     required = (\"LANGFUSE_PUBLIC_KEY\", \"LANGFUSE_SECRET_KEY\", \"LANGFUSE_HOST\")\n     missing = [k for k in required if not os.getenv(k)]\n     if missing:\n         raise RuntimeError(f\"Missing LangFuse env vars: {', '.join(missing)}\")\n     get_client()\ndiff --git a/src/tools/trace.py b/src/tools/trace.py\nindex d4e5f6a..b7c8d9e 100644\n--- a/src/tools/trace.py\n+++ b/src/tools/trace.py\n@@ -8,6 +8,8 @@ TRACES_DIR = Path(__file__).parent.parent.parent / \"traces\"\n \n \n def log_structured_trace(state: PipelineState) -> None:\n+    \"\"\"Append one JSONL entry for this run to traces/YYYY-MM-DD.jsonl.\"\"\"\n     TRACES_DIR.mkdir(exist_ok=True)\n     today = datetime.now(timezone.utc).strftime(\"%Y-%m-%d\")\n",
+  "files_changed": ["src/utils.py", "src/tools/trace.py"],
+  "expected_risk_level": "low",
+  "expected_change_types": ["docs"],
+  "planted_issues": []
+}

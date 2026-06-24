@@ -28,5 +28,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
+[tool.pytest.ini_options]
+markers = [
+    "llm_eval: marks tests that make real LLM calls (costs money)",
+    "integration: marks tests that hit real external APIs",
+]
+
 [tool.ruff]
 line-length = 100
