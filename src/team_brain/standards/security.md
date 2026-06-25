@@ -37,5 +37,7 @@
 
 ## GitHub Token Scoping
 - GitHub personal access tokens must use the minimum required scope
-- For posting PR comments only: `pull_requests: write` is sufficient — do not use `repo` full scope
+- Prefer fine-grained tokens over classic tokens — they allow operation-level permissions
+- For posting PR comments: fine-grained `Pull requests: Read and write` is sufficient
+- For classic tokens: use `public_repo` for public repos; only escalate to `repo` for private repos
 - Document required token scopes in the README

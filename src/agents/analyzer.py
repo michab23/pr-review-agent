@@ -2,8 +2,6 @@
 from agno.agent import Agent
 from agno.models.litellm import LiteLLM
 
-from src.models import PRClassification
-
 ANALYZER_SYSTEM_PROMPT = """\
 You are a PR risk classifier. Given a pull request diff and metadata, your job is to:
 1. Identify the type(s) of change (feature, bug_fix, refactor, security, docs, config, dependency)
@@ -12,7 +10,16 @@ high (security-sensitive/auth/payments/data migrations/dependency bumps)
 3. List the specific files that drove your risk rating
 4. Choose the review model: low→haiku, medium→sonnet, high→opus
 
-Return a valid PRClassification. Be conservative: when in doubt, rate higher.\
+Be conservative: when in doubt, rate higher.
+
+Return ONLY a valid JSON object — no markdown fences, no prose:
+{
+  "risk_level": "low" | "medium" | "high",
+  "change_types": ["feature" | "bug_fix" | "refactor" | "security" | "docs" | "config" | "dependency"],
+  "risk_rationale": "<one sentence>",
+  "model_to_use": "<litellm model id>",
+  "files_of_concern": ["<filename>", ...]
+}\
 """
 
 # Risk → LiteLLM model ID routing (spec/data-model.md)
@@ -24,7 +31,6 @@ RISK_MODEL_MAP = {
 
 analyzer_agent = Agent(
     name="analyzer",
-    model=LiteLLM(id="anthropic/claude-haiku-4-5-20251001", top_p=None),
-    output_schema=PRClassification,
+    model=LiteLLM(id="anthropic/claude-haiku-4-5-20251001", top_p=None, temperature=1),
     instructions=ANALYZER_SYSTEM_PROMPT,
 )

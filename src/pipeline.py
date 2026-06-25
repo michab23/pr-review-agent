@@ -1,4 +1,6 @@
 # Pipeline entry point — see spec/spec.md §4 for full agent wiring and HITL behavior
+import json
+import re
 import select
 import sys
 from uuid import uuid4
@@ -13,6 +15,7 @@ from src.agents.reporter import reporter_agent
 from src.agents.reviewer import reviewer_agent
 from src.models import PRClassification, PipelineState, ReviewFindings
 from src.tools.github import get_pr_metadata, post_pr_comment, validate_diff
+from src.tools.team_brain import get_team_standards
 from src.tools.trace import log_structured_trace
 from src.utils import setup_langfuse_tracing
 
@@ -22,6 +25,60 @@ console = Console()
 langfuse = get_client()
 
 HITL_TIMEOUT_SECONDS = 60
+
+
+def _extract_json(text: str) -> str:
+    """Extract the outermost JSON object from LLM output, handling markdown fences."""
+    # Strip outer markdown fence (greedy so inner fences inside string values are kept)
+    text = re.sub(r"^```(?:json)?\s*\n(.*)\n```\s*$", r"\1", text.strip(), flags=re.DOTALL)
+    text = text.strip()
+    start = text.find("{")
+    if start == -1:
+        raise ValueError(f"No JSON object found in LLM output: {text[:200]!r}")
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(text, start)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"Failed to parse JSON from LLM output: {e}. "
+            f"Text prefix: {text[start:start + 200]!r}"
+        ) from e
+    return json.dumps(obj)
+
+
+_JSON_RETRY_SUFFIX = (
+    "\n\nCRITICAL: Your entire response must be a single valid JSON object. "
+    "No markdown fences, no prose, no explanation — just the JSON."
+)
+
+
+def _run_agent_json(agent, prompt: str, name: str):
+    """Run agent and extract JSON from string content, retrying once on parse failure."""
+    result = agent.run(prompt)
+    content = result.content
+    if not isinstance(content, str):
+        return content
+    try:
+        return _extract_json(content)
+    except ValueError:
+        retry = agent.run(prompt + _JSON_RETRY_SUFFIX)
+        content = retry.content
+        if not isinstance(content, str):
+            return content
+        try:
+            return _extract_json(content)
+        except ValueError as exc:
+            raise ValueError(f"[{name}] failed to return valid JSON after retry: {exc}") from exc
+
+
+_CHANGE_TYPE_TOPICS = {
+    "feature": ["python", "testing"],
+    "bug_fix": ["python", "testing"],
+    "refactor": ["python"],
+    "security": ["security", "python"],
+    "docs": [],
+    "config": ["git"],
+    "dependency": ["security"],
+}
 
 
 def human_approval_gate(state: PipelineState) -> bool:
@@ -45,30 +102,39 @@ def run(pr_url: str) -> PipelineState:
         # Agent 1: Analyzer
         metadata = get_pr_metadata(pr_url)
         metadata = metadata.model_copy(update={"diff": validate_diff(metadata.diff)})
-        result = analyzer_agent.run(str(metadata.model_dump()))
+        raw = _run_agent_json(analyzer_agent, str(metadata.model_dump()), "analyzer")
         state.metadata = metadata
-        classification = result.content
-        if isinstance(classification, str):
-            classification = PRClassification.model_validate_json(classification)
+        classification = raw if not isinstance(raw, str) else PRClassification.model_validate_json(raw)
         state.classification = classification
 
         # Agent 2: Reviewer — model resolved from risk level at runtime
         from agno.models.litellm import LiteLLM
         model_id = RISK_MODEL_MAP[state.classification.risk_level.value]
-        reviewer_agent.model = LiteLLM(id=model_id, top_p=None)
-        findings_result = reviewer_agent.run(
+        reviewer_agent.model = LiteLLM(id=model_id, top_p=None, temperature=1)
+
+        # Pre-fetch standards so reviewer gets them in-prompt (avoids Agno tool-call conflicts
+        # between output_schema structured-output machinery and user-registered tools).
+        topics = {t for ct in state.classification.change_types
+                  for t in _CHANGE_TYPE_TOPICS.get(ct.value, [])}
+        standards = get_team_standards(sorted(topics)) if topics else []
+        standards_text = "\n\n---\n\n".join(standards) if standards else "(none)"
+
+        raw_findings = _run_agent_json(
+            reviewer_agent,
             f"Metadata: {state.metadata.model_dump_json()}\n"
-            f"Classification: {state.classification.model_dump_json()}"
+            f"Classification: {state.classification.model_dump_json()}\n"
+            f"Applicable Standards:\n{standards_text}",
+            "reviewer",
         )
-        findings = findings_result.content
-        if isinstance(findings, str):
-            findings = ReviewFindings.model_validate_json(findings)
+        findings = raw_findings if not isinstance(raw_findings, str) else ReviewFindings.model_validate_json(raw_findings)
         state.findings = findings
 
         # Agent 3: Reporter — produces draft comment
         draft_result = reporter_agent.run(
             f"Metadata: {state.metadata.model_dump_json()}\n"
-            f"Findings: {state.findings.model_dump_json()}"
+            f"Findings: {state.findings.model_dump_json()}\n"
+            f"Run ID: {state.run_id}\n"
+            f"Cost USD: {state.total_cost_usd:.4f}"
         )
         state.draft_comment = draft_result.content
 
