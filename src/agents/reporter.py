@@ -15,6 +15,6 @@ Follow the comment template in spec/data-model.md exactly.\
 
 reporter_agent = Agent(
     name="reporter",
-    model=LiteLLM(id="anthropic/claude-sonnet-4-6", top_p=None),
+    model=LiteLLM(id="anthropic/claude-sonnet-4-6", top_p=None, temperature=1),
     instructions=REPORTER_SYSTEM_PROMPT,
 )

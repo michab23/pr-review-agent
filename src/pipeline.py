@@ -1,4 +1,5 @@
 # Pipeline entry point — see spec/spec.md §4 for full agent wiring and HITL behavior
+import re
 import select
 import sys
 from uuid import uuid4
@@ -13,6 +14,7 @@ from src.agents.reporter import reporter_agent
 from src.agents.reviewer import reviewer_agent
 from src.models import PRClassification, PipelineState, ReviewFindings
 from src.tools.github import get_pr_metadata, post_pr_comment, validate_diff
+from src.tools.team_brain import get_team_standards
 from src.tools.trace import log_structured_trace
 from src.utils import setup_langfuse_tracing
 
@@ -22,6 +24,24 @@ console = Console()
 langfuse = get_client()
 
 HITL_TIMEOUT_SECONDS = 60
+
+_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
+
+
+def _extract_json(text: str) -> str:
+    """Strip markdown code fences if present; return raw JSON string."""
+    m = _JSON_FENCE_RE.search(text)
+    return m.group(1) if m else text.strip()
+
+_CHANGE_TYPE_TOPICS = {
+    "feature": ["python", "testing"],
+    "bug_fix": ["python", "testing"],
+    "refactor": ["python"],
+    "security": ["security", "python"],
+    "docs": [],
+    "config": ["git"],
+    "dependency": ["security"],
+}
 
 
 def human_approval_gate(state: PipelineState) -> bool:
@@ -49,26 +69,37 @@ def run(pr_url: str) -> PipelineState:
         state.metadata = metadata
         classification = result.content
         if isinstance(classification, str):
-            classification = PRClassification.model_validate_json(classification)
+            classification = PRClassification.model_validate_json(_extract_json(classification))
         state.classification = classification
 
         # Agent 2: Reviewer — model resolved from risk level at runtime
         from agno.models.litellm import LiteLLM
         model_id = RISK_MODEL_MAP[state.classification.risk_level.value]
-        reviewer_agent.model = LiteLLM(id=model_id, top_p=None)
+        reviewer_agent.model = LiteLLM(id=model_id, top_p=None, temperature=1)
+
+        # Pre-fetch standards so reviewer gets them in-prompt (avoids Agno tool-call conflicts
+        # between output_schema structured-output machinery and user-registered tools).
+        topics = {t for ct in state.classification.change_types
+                  for t in _CHANGE_TYPE_TOPICS.get(ct.value, [])}
+        standards = get_team_standards(sorted(topics)) if topics else []
+        standards_text = "\n\n---\n\n".join(standards) if standards else "(none)"
+
         findings_result = reviewer_agent.run(
             f"Metadata: {state.metadata.model_dump_json()}\n"
-            f"Classification: {state.classification.model_dump_json()}"
+            f"Classification: {state.classification.model_dump_json()}\n"
+            f"Applicable Standards:\n{standards_text}"
         )
         findings = findings_result.content
         if isinstance(findings, str):
-            findings = ReviewFindings.model_validate_json(findings)
+            findings = ReviewFindings.model_validate_json(_extract_json(findings))
         state.findings = findings
 
         # Agent 3: Reporter — produces draft comment
         draft_result = reporter_agent.run(
             f"Metadata: {state.metadata.model_dump_json()}\n"
-            f"Findings: {state.findings.model_dump_json()}"
+            f"Findings: {state.findings.model_dump_json()}\n"
+            f"Run ID: {state.run_id}\n"
+            f"Cost USD: {state.total_cost_usd:.4f}"
         )
         state.draft_comment = draft_result.content
 

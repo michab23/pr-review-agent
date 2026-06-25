@@ -18,6 +18,8 @@ _MAX_DIFF_BYTES = 102_400  # 100 KB
 
 def get_pr_metadata(url: str) -> PRMetadata:
     """Fetch PR metadata and diff from GitHub. Rejects diffs > 100KB."""
+    from github import GithubException
+
     token = os.environ["GITHUB_TOKEN"]
     gh = Github(token)
 
@@ -27,19 +29,30 @@ def get_pr_metadata(url: str) -> PRMetadata:
         raise ValueError(f"Invalid GitHub PR URL: {url}")
     repo_name, pr_number = match.group(1), int(match.group(2))
 
-    repo = gh.get_repo(repo_name)
-    pr = repo.get_pull(pr_number)
+    try:
+        repo = gh.get_repo(repo_name)
+        pr = repo.get_pull(pr_number)
+    except GithubException as e:
+        if e.status == 404:
+            raise RuntimeError(
+                f"Repository '{repo_name}' not found (404). "
+                "If this is a private repo, ensure your GITHUB_TOKEN has 'repo' scope."
+            ) from None
+        raise RuntimeError(f"GitHub API error {e.status}: {e.data}") from None
 
-    # Fetch unified diff via raw API
-    import httpx
-    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3.diff"}
-    resp = httpx.get(f"https://api.github.com/repos/{repo_name}/pulls/{pr_number}", headers=headers)
-    diff = resp.text
+    # Build diff from file patches — uses only Pull requests: Read, no Contents permission needed.
+    # Each File object from get_files() carries the unified patch for that file.
+    diff_parts = []
+    files_changed = []
+    for f in pr.get_files():
+        files_changed.append(f.filename)
+        if f.patch:
+            diff_parts.append(f"--- a/{f.filename}\n+++ b/{f.filename}\n{f.patch}")
+    diff = "\n".join(diff_parts)
 
     if len(diff.encode()) > _MAX_DIFF_BYTES:
-        raise ValueError(f"Diff exceeds 100KB limit ({len(diff.encode())} bytes). Aborting.")
-
-    files_changed = [f.filename for f in pr.get_files()]
+        diff = diff.encode()[:_MAX_DIFF_BYTES].decode("utf-8", errors="ignore")
+        diff += "\n\n[diff truncated — exceeds 100 KB]"
 
     return PRMetadata(
         url=url,
@@ -74,5 +87,11 @@ def post_pr_comment(repo: str, pr_number: int, body: str) -> str:
     except GithubException as e:
         status = e.status
         msg = e.data.get("message", str(e)) if isinstance(e.data, dict) else str(e)
+        if status == 403:
+            raise RuntimeError(
+                f"GitHub 403: cannot post comment to {repo}#{pr_number}. "
+                "Your GITHUB_TOKEN needs write access: for classic tokens add 'repo' scope; "
+                "for fine-grained tokens add 'Pull requests: Read and write' permission."
+            ) from None
         raise RuntimeError(f"GitHub {status}: {msg}") from None
     return comment.html_url
