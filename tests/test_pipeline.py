@@ -56,6 +56,15 @@ class TestExtractJson:
         result = _extract_json(fenced)
         parsed = json.loads(result)
         assert parsed["findings"][0]["suggestion"].startswith("Replace with:")
+
+    def test_trailing_brace_in_prose_ignored(self):
+        # rfind('}') would capture the trailing } from prose; raw_decode stops at the right place
+        import json
+        from src.pipeline import _extract_json
+        text = '{"key": "value"}\n\nNote: see pattern {x} for details.'
+        result = _extract_json(text)
+        assert json.loads(result) == {"key": "value"}
+
 import io
 import os
 from unittest.mock import MagicMock, patch

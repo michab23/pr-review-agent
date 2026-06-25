@@ -1,4 +1,6 @@
 # Pipeline entry point — see spec/spec.md §4 for full agent wiring and HITL behavior
+import json
+import re
 import select
 import sys
 from uuid import uuid4
@@ -26,12 +28,21 @@ HITL_TIMEOUT_SECONDS = 60
 
 
 def _extract_json(text: str) -> str:
-    """Extract the outermost JSON object from text, ignoring code-fence markers."""
+    """Extract the outermost JSON object from LLM output, handling markdown fences."""
+    # Strip outer markdown fence (greedy so inner fences inside string values are kept)
+    text = re.sub(r"^```(?:json)?\s*\n(.*)\n```\s*$", r"\1", text.strip(), flags=re.DOTALL)
+    text = text.strip()
     start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        return text[start : end + 1]
-    return text.strip()
+    if start == -1:
+        raise ValueError(f"No JSON object found in LLM output: {text[:200]!r}")
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(text, start)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"Failed to parse JSON from LLM output: {e}. "
+            f"Text prefix: {text[start:start + 200]!r}"
+        ) from e
+    return json.dumps(obj)
 
 _CHANGE_TYPE_TOPICS = {
     "feature": ["python", "testing"],

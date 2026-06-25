@@ -44,15 +44,27 @@ def get_pr_metadata(url: str) -> PRMetadata:
     # Each File object from get_files() carries the unified patch for that file.
     diff_parts = []
     files_changed = []
-    for f in pr.get_files():
-        files_changed.append(f.filename)
-        if f.patch:
-            diff_parts.append(f"--- a/{f.filename}\n+++ b/{f.filename}\n{f.patch}")
+    try:
+        for f in pr.get_files():
+            files_changed.append(f.filename)
+            if f.patch:
+                diff_parts.append(f"--- a/{f.filename}\n+++ b/{f.filename}\n{f.patch}")
+    except GithubException as e:
+        msg = e.data.get("message", str(e)) if isinstance(e.data, dict) else str(e)
+        if e.status == 403:
+            raise RuntimeError(
+                f"GitHub 403: cannot read files for {repo_name}#{pr_number}. "
+                "Your GITHUB_TOKEN needs read access: for fine-grained tokens add "
+                "'Pull requests: Read' permission; for classic tokens add 'repo' scope."
+            ) from None
+        raise RuntimeError(f"GitHub API error {e.status}: {msg}") from None
     diff = "\n".join(diff_parts)
 
-    if len(diff.encode()) > _MAX_DIFF_BYTES:
-        diff = diff.encode()[:_MAX_DIFF_BYTES].decode("utf-8", errors="ignore")
-        diff += "\n\n[diff truncated — exceeds 100 KB]"
+    _TRUNCATION_MARKER = "\n\n[diff truncated — exceeds 100 KB]"
+    diff_bytes = diff.encode()
+    if len(diff_bytes) > _MAX_DIFF_BYTES:
+        keep = _MAX_DIFF_BYTES - len(_TRUNCATION_MARKER.encode("utf-8"))
+        diff = diff_bytes[:keep].decode("utf-8", errors="ignore") + _TRUNCATION_MARKER
 
     return PRMetadata(
         url=url,
@@ -90,8 +102,10 @@ def post_pr_comment(repo: str, pr_number: int, body: str) -> str:
         if status == 403:
             raise RuntimeError(
                 f"GitHub 403: cannot post comment to {repo}#{pr_number}. "
-                "Your GITHUB_TOKEN needs write access: for classic tokens add 'repo' scope; "
-                "for fine-grained tokens add 'Pull requests: Read and write' permission."
+                "To post PR comments your GITHUB_TOKEN needs write access: "
+                "for fine-grained tokens add 'Pull requests: Read and write' permission; "
+                "for classic tokens use 'public_repo' scope (public repos) "
+                "or 'repo' scope (private repos)."
             ) from None
         raise RuntimeError(f"GitHub {status}: {msg}") from None
     return comment.html_url

@@ -118,7 +118,7 @@ class TestGetPrMetadata:
             )
             result = get_pr_metadata("https://github.com/owner/repo/pull/42")
 
-        assert len(result.diff.encode()) <= 102_400 + 200  # truncated + marker overhead
+        assert len(result.diff.encode()) <= 102_400
         assert "[diff truncated" in result.diff
 
     @patch.dict(os.environ, {"GITHUB_TOKEN": "ghp_fake"})
