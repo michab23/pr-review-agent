@@ -24,7 +24,7 @@ Built for the Tikal LLM Engineering Course · Capstone Project · Team 4
                           ▼  model selection by risk
  ┌─────────────────────────────────────────────────────────────┐
  │  AGENT 2 · Reviewer  [Haiku | Sonnet | Opus]               │
- │  Tool: get_team_standards() via Team Brain MCP (stdio)     │
+ │  Tool: get_team_standards() via Team Brain MCP (SSE)       │
  │  Produces ReviewFindings grounded in retrieved standards   │
  │  Self-review step strips hallucinated file paths           │
  └────────────────────────┬────────────────────────────────────┘
@@ -85,6 +85,28 @@ LANGFUSE_HOST=https://cloud.langfuse.com
 ---
 
 ## Running
+
+### Team Brain MCP server (start once, keep running)
+
+The pipeline retrieves team coding standards from the Team Brain MCP server. Start it in a
+dedicated terminal before running the pipeline:
+
+```bash
+# Terminal 1 — start once, leave running
+uv run team-brain
+```
+
+The server is ready when you see:
+```
+Starting MCP server 'team-brain' with transport 'sse'
+```
+
+If the server is not running, the pipeline falls back to reading standards files directly
+and prints a warning — reviews still complete.
+
+> **Non-default address**: Override with `TEAM_BRAIN_URL=http://host:port/sse` in both terminals.
+
+---
 
 ### Demo (offline, no GitHub token needed)
 
@@ -158,7 +180,7 @@ spec/                 # Architecture decision records + data model spec
 |----------|--------|-----------|
 | Framework | Agno v2.6 | Native `output_schema` + LiteLLM backend |
 | Model routing | risk-tiered | Cost control — haiku for low-risk PRs |
-| Standards delivery | MCP stdio | Reviewer gets live standards, not baked-in prompt text |
+| Standards delivery | MCP SSE | Reviewer gets live standards from persistent server, not baked-in prompt text |
 | GitHub I/O | pipeline level only | Agents never touch GitHub — cleaner separation |
 | Reflection | system prompt self-check | Reduces hallucinated file paths without a second LLM call |
 | Observability | LangFuse `@observe` | Full trace tree per run, human approval score |

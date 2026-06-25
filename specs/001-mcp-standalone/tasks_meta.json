@@ -1,0 +1,55 @@
+{
+    "feature": "001-mcp-standalone",
+    "created": "2026-06-25T00:00:00+00:00",
+    "tasks": {
+        "T001": {
+            "description": "Add TEAM_BRAIN_URL to .env.example",
+            "files": ".env.example",
+            "mode": "ASYNC",
+            "story": null,
+            "status": "pending"
+        },
+        "T002": {
+            "description": "Update src/team_brain/server.py default transport to sse",
+            "files": "src/team_brain/server.py",
+            "mode": "SYNC",
+            "story": "US1",
+            "status": "pending"
+        },
+        "T003": {
+            "description": "Update src/tools/team_brain.py SSE client replacing stdio subprocess",
+            "files": "src/tools/team_brain.py",
+            "mode": "SYNC",
+            "story": "US1",
+            "status": "pending"
+        },
+        "T004": {
+            "description": "Add fallback warning in src/tools/team_brain.py when server unreachable",
+            "files": "src/tools/team_brain.py",
+            "mode": "SYNC",
+            "story": "US2",
+            "status": "pending"
+        },
+        "T005": {
+            "description": "Update README.md with two-terminal workflow section",
+            "files": "README.md",
+            "mode": "ASYNC",
+            "story": "US3",
+            "status": "pending"
+        },
+        "T006": {
+            "description": "Add pyproject.toml script entry and server.py main() function",
+            "files": "pyproject.toml,src/team_brain/server.py",
+            "mode": "ASYNC",
+            "story": "US3",
+            "status": "pending"
+        },
+        "T007": {
+            "description": "Manual end-to-end validation per quickstart.md",
+            "files": "specs/001-mcp-standalone/quickstart.md",
+            "mode": "ASYNC",
+            "story": null,
+            "status": "pending"
+        }
+    }
+}

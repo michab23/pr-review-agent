@@ -28,5 +28,9 @@ def get_all_standards() -> str:
     return "\n\n---\n\n".join(p.read_text() for p in sorted(STANDARDS_DIR.glob("*.md")))
 
 
+def main() -> None:
+    mcp.run(transport="sse")
+
+
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    main()
