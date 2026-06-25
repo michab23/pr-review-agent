@@ -1,5 +1,4 @@
 # Pipeline entry point — see spec/spec.md §4 for full agent wiring and HITL behavior
-import re
 import select
 import sys
 from uuid import uuid4
@@ -25,13 +24,14 @@ langfuse = get_client()
 
 HITL_TIMEOUT_SECONDS = 60
 
-_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
-
 
 def _extract_json(text: str) -> str:
-    """Strip markdown code fences if present; return raw JSON string."""
-    m = _JSON_FENCE_RE.search(text)
-    return m.group(1) if m else text.strip()
+    """Extract the outermost JSON object from text, ignoring code-fence markers."""
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return text[start : end + 1]
+    return text.strip()
 
 _CHANGE_TYPE_TOPICS = {
     "feature": ["python", "testing"],

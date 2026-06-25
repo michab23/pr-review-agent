@@ -29,6 +29,33 @@ class TestExtractJson:
         result = _extract_json(fenced)
         assert result.startswith("{")
         assert "risk_level" in result
+
+    def test_code_fences_inside_suggestion_strings(self):
+        # Regression: reviewer wraps response in ```json...``` AND includes ```python...```
+        # inside suggestion fields. The old non-greedy regex stopped at the first inner ```
+        # and returned truncated JSON. The new impl finds outermost { ... } instead.
+        from src.pipeline import _extract_json
+        import json
+
+        inner_json = {
+            "summary": "Issues found",
+            "findings": [
+                {
+                    "severity": "warning",
+                    "file": "auth.py",
+                    "line_range": "42",
+                    "issue": "Uses MD5",
+                    "standard_cited": "Security §3.1",
+                    "suggestion": "Replace with:\n```python\nhashlib.sha256(data).hexdigest()\n```",
+                }
+            ],
+            "verdict": "request_changes",
+            "confidence": 0.9,
+        }
+        fenced = f"```json\n{json.dumps(inner_json)}\n```"
+        result = _extract_json(fenced)
+        parsed = json.loads(result)
+        assert parsed["findings"][0]["suggestion"].startswith("Replace with:")
 import io
 import os
 from unittest.mock import MagicMock, patch
