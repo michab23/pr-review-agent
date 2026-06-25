@@ -67,9 +67,62 @@ class TestExtractJson:
 
 import io
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
+
+# ---------------------------------------------------------------------------
+# _run_agent_json
+# ---------------------------------------------------------------------------
+
+class TestRunAgentJson:
+    def _make_agent(self, *contents):
+        """Return a mock agent whose .run() returns each content in sequence."""
+        agent = MagicMock()
+        agent.run.side_effect = [MagicMock(content=c) for c in contents]
+        return agent
+
+    def test_returns_model_object_unchanged(self):
+        from src.pipeline import _run_agent_json
+        obj = MagicMock()  # non-string content (e.g. already-parsed Pydantic model)
+        agent = self._make_agent(obj)
+        result = _run_agent_json(agent, "prompt", "test")
+        assert result is obj
+        agent.run.assert_called_once_with("prompt")
+
+    def test_returns_extracted_json_on_first_success(self):
+        from src.pipeline import _run_agent_json
+        agent = self._make_agent('{"key": "value"}')
+        result = _run_agent_json(agent, "prompt", "test")
+        assert result == '{"key": "value"}'
+        agent.run.assert_called_once_with("prompt")
+
+    def test_retries_once_on_parse_failure_and_succeeds(self):
+        from src.pipeline import _run_agent_json, _JSON_RETRY_SUFFIX
+        bad_response = "Here is the analysis: {status}: failed"
+        good_response = '{"key": "value"}'
+        agent = self._make_agent(bad_response, good_response)
+        result = _run_agent_json(agent, "prompt", "test")
+        assert result == '{"key": "value"}'
+        assert agent.run.call_count == 2
+        assert agent.run.call_args_list[1] == call("prompt" + _JSON_RETRY_SUFFIX)
+
+    def test_raises_on_double_failure(self):
+        from src.pipeline import _run_agent_json
+        bad = "still prose, no JSON here"
+        agent = self._make_agent(bad, bad)
+        with pytest.raises(ValueError, match=r"\[myagent\]"):
+            _run_agent_json(agent, "prompt", "myagent")
+        assert agent.run.call_count == 2
+
+    def test_retry_returns_model_object_if_agno_parsed_on_retry(self):
+        from src.pipeline import _run_agent_json
+        bad = "not json"
+        obj = MagicMock()  # retry returns a model object
+        agent = self._make_agent(bad, obj)
+        result = _run_agent_json(agent, "prompt", "test")
+        assert result is obj
+
 
 from src.models import (
     ChangeType,

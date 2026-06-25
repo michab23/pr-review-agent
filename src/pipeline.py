@@ -44,6 +44,32 @@ def _extract_json(text: str) -> str:
         ) from e
     return json.dumps(obj)
 
+
+_JSON_RETRY_SUFFIX = (
+    "\n\nCRITICAL: Your entire response must be a single valid JSON object. "
+    "No markdown fences, no prose, no explanation — just the JSON."
+)
+
+
+def _run_agent_json(agent, prompt: str, name: str):
+    """Run agent and extract JSON from string content, retrying once on parse failure."""
+    result = agent.run(prompt)
+    content = result.content
+    if not isinstance(content, str):
+        return content
+    try:
+        return _extract_json(content)
+    except ValueError:
+        retry = agent.run(prompt + _JSON_RETRY_SUFFIX)
+        content = retry.content
+        if not isinstance(content, str):
+            return content
+        try:
+            return _extract_json(content)
+        except ValueError as exc:
+            raise ValueError(f"[{name}] failed to return valid JSON after retry: {exc}") from exc
+
+
 _CHANGE_TYPE_TOPICS = {
     "feature": ["python", "testing"],
     "bug_fix": ["python", "testing"],
@@ -76,11 +102,9 @@ def run(pr_url: str) -> PipelineState:
         # Agent 1: Analyzer
         metadata = get_pr_metadata(pr_url)
         metadata = metadata.model_copy(update={"diff": validate_diff(metadata.diff)})
-        result = analyzer_agent.run(str(metadata.model_dump()))
+        raw = _run_agent_json(analyzer_agent, str(metadata.model_dump()), "analyzer")
         state.metadata = metadata
-        classification = result.content
-        if isinstance(classification, str):
-            classification = PRClassification.model_validate_json(_extract_json(classification))
+        classification = raw if not isinstance(raw, str) else PRClassification.model_validate_json(raw)
         state.classification = classification
 
         # Agent 2: Reviewer — model resolved from risk level at runtime
@@ -95,14 +119,14 @@ def run(pr_url: str) -> PipelineState:
         standards = get_team_standards(sorted(topics)) if topics else []
         standards_text = "\n\n---\n\n".join(standards) if standards else "(none)"
 
-        findings_result = reviewer_agent.run(
+        raw_findings = _run_agent_json(
+            reviewer_agent,
             f"Metadata: {state.metadata.model_dump_json()}\n"
             f"Classification: {state.classification.model_dump_json()}\n"
-            f"Applicable Standards:\n{standards_text}"
+            f"Applicable Standards:\n{standards_text}",
+            "reviewer",
         )
-        findings = findings_result.content
-        if isinstance(findings, str):
-            findings = ReviewFindings.model_validate_json(_extract_json(findings))
+        findings = raw_findings if not isinstance(raw_findings, str) else ReviewFindings.model_validate_json(raw_findings)
         state.findings = findings
 
         # Agent 3: Reporter — produces draft comment
