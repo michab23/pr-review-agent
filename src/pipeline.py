@@ -1,6 +1,5 @@
 # Pipeline entry point — see specs/003-agent-independence/plan.md for agent wiring, HITL, and graceful-degradation behavior
 import json
-import re
 import select
 import sys
 from uuid import uuid4
@@ -30,7 +29,7 @@ from src.models import ChangeType, PRClassification, PipelineState, ReviewFindin
 from src.tools.github import get_pr_metadata, post_pr_comment, validate_diff
 from src.tools.team_brain import get_team_standards
 from src.tools.trace import log_structured_trace
-from src.utils import setup_langfuse_tracing
+from src.utils import extract_json as _extract_json, setup_langfuse_tracing
 
 load_dotenv()
 
@@ -38,24 +37,6 @@ console = Console()
 langfuse = get_client()
 
 HITL_TIMEOUT_SECONDS = 60
-
-
-def _extract_json(text: str) -> str:
-    """Extract the outermost JSON object from LLM output, handling markdown fences."""
-    # Strip outer markdown fence (greedy so inner fences inside string values are kept)
-    text = re.sub(r"^```(?:json)?\s*\n(.*)\n```\s*$", r"\1", text.strip(), flags=re.DOTALL)
-    text = text.strip()
-    start = text.find("{")
-    if start == -1:
-        raise ValueError(f"No JSON object found in LLM output: {text[:200]!r}")
-    try:
-        obj, _ = json.JSONDecoder().raw_decode(text, start)
-    except json.JSONDecodeError as e:
-        raise ValueError(
-            f"Failed to parse JSON from LLM output: {e}. "
-            f"Text prefix: {text[start:start + 200]!r}"
-        ) from e
-    return json.dumps(obj)
 
 
 _JSON_RETRY_SUFFIX = (

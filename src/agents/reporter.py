@@ -40,6 +40,8 @@ def run_standalone(payload: dict) -> str:
 if __name__ == "__main__":
     import json
     import sys
+    from dotenv import load_dotenv
+    load_dotenv()
     try:
         payload = json.load(sys.stdin)
         print(run_standalone(payload))

@@ -146,16 +146,13 @@ other agents required:
 
 ```bash
 # Analyzer — input: PRMetadata JSON → output: PRClassification JSON
-echo '{"url":"...","repo":"owner/repo","pr_number":1,"title":"fix","description":"","diff":"--- a/x.py\n+++ b/x.py\n+x=1","files_changed":["x.py"],"lines_added":1,"lines_removed":0}' \
-  | uv run python -m src.agents.analyzer
+echo '{"url":"https://github.com/owner/repo/pull/1","repo":"owner/repo","pr_number":1,"title":"fix","description":"","diff":"--- a/x.py\n+++ b/x.py\n+x=1","files_changed":["x.py"],"lines_added":1,"lines_removed":0}' | uv run python -m src.agents.analyzer
 
 # Reviewer — input: {metadata, classification, standards} JSON → output: ReviewFindings JSON
-echo '{"metadata":{...},"classification":{...},"standards":"(none)"}' \
-  | uv run python -m src.agents.reviewer
+echo '{"metadata":{"url":"https://github.com/owner/repo/pull/1","repo":"owner/repo","pr_number":1,"title":"fix","description":"","diff":"--- a/x.py\n+++ b/x.py\n+x=1","files_changed":["x.py"],"lines_added":1,"lines_removed":0},"classification":{"risk_level":"low","change_types":["bug_fix"],"risk_rationale":"Trivial single-line fix","model_to_use":"anthropic/claude-haiku-4-5-20251001","files_of_concern":["x.py"]},"standards":"(none)"}' | uv run python -m src.agents.reviewer
 
 # Reporter — input: {metadata, findings, run_id, cost_usd} JSON → output: markdown comment
-echo '{"metadata":{...},"findings":{...},"run_id":"debug-001","cost_usd":0.0}' \
-  | uv run python -m src.agents.reporter
+echo '{"metadata":{"url":"https://github.com/owner/repo/pull/1","repo":"owner/repo","pr_number":1,"title":"fix","description":"","diff":"--- a/x.py\n+++ b/x.py\n+x=1","files_changed":["x.py"],"lines_added":1,"lines_removed":0},"findings":{"summary":"No issues found.","findings":[],"verdict":"approve","confidence":0.9},"run_id":"debug-001","cost_usd":0.0}' | uv run python -m src.agents.reporter
 ```
 
 Invalid input exits with code 1 and a message on stderr.

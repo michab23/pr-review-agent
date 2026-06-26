@@ -40,17 +40,20 @@ def run_standalone(payload: dict) -> dict:
     """Run the Analyzer against a PRMetadata payload; return PRClassification dict."""
     import json
     from src.models import PRMetadata
+    from src.utils import extract_json
     metadata = PRMetadata.model_validate(payload)
     result = analyzer_agent.run(str(metadata.model_dump()))
     content = result.content
     if isinstance(content, str):
-        return json.loads(content)
+        return json.loads(extract_json(content))
     return content.model_dump()
 
 
 if __name__ == "__main__":
     import json
     import sys
+    from dotenv import load_dotenv
+    load_dotenv()
     try:
         payload = json.load(sys.stdin)
         print(json.dumps(run_standalone(payload), indent=2))

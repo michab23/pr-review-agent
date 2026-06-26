@@ -55,6 +55,7 @@ def run_standalone(payload: dict) -> dict:
     """Run the Reviewer against {metadata, classification, standards} payload; return ReviewFindings dict."""
     import json
     from src.models import PRClassification, PRMetadata
+    from src.utils import extract_json
     metadata = PRMetadata.model_validate(payload["metadata"])
     classification = PRClassification.model_validate(payload["classification"])
     standards_text = payload.get("standards", "(none)")
@@ -66,13 +67,15 @@ def run_standalone(payload: dict) -> dict:
     result = reviewer_agent.run(prompt)
     content = result.content
     if isinstance(content, str):
-        return json.loads(content)
+        return json.loads(extract_json(content))
     return content.model_dump()
 
 
 if __name__ == "__main__":
     import json
     import sys
+    from dotenv import load_dotenv
+    load_dotenv()
     try:
         payload = json.load(sys.stdin)
         print(json.dumps(run_standalone(payload), indent=2))
