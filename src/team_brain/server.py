@@ -1,4 +1,5 @@
 # Team Brain MCP server — see spec/spec.md §5 for transport and tool spec
+import os
 from pathlib import Path
 
 from fastmcp import FastMCP
@@ -29,7 +30,8 @@ def get_all_standards() -> str:
 
 
 def main() -> None:
-    mcp.run(transport="sse")
+    transport = os.getenv("FASTMCP_TRANSPORT", "sse")
+    mcp.run(transport=transport)
 
 
 if __name__ == "__main__":
