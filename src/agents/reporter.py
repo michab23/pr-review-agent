@@ -18,3 +18,31 @@ reporter_agent = Agent(
     model=LiteLLM(id="anthropic/claude-sonnet-4-6", top_p=None, temperature=1),
     instructions=REPORTER_SYSTEM_PROMPT,
 )
+
+
+def run_standalone(payload: dict) -> str:
+    """Run the Reporter against {metadata, findings, run_id, cost_usd} payload; return formatted comment."""
+    from src.models import PRMetadata, ReviewFindings
+    metadata = PRMetadata.model_validate(payload["metadata"])
+    findings = ReviewFindings.model_validate(payload["findings"])
+    run_id = payload.get("run_id", "standalone")
+    cost_usd = float(payload.get("cost_usd", 0.0))
+    prompt = (
+        f"Metadata: {metadata.model_dump_json()}\n"
+        f"Findings: {findings.model_dump_json()}\n"
+        f"Run ID: {run_id}\n"
+        f"Cost USD: {cost_usd:.4f}"
+    )
+    result = reporter_agent.run(prompt)
+    return result.content
+
+
+if __name__ == "__main__":
+    import json
+    import sys
+    try:
+        payload = json.load(sys.stdin)
+        print(run_standalone(payload))
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)

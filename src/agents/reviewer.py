@@ -49,3 +49,33 @@ reviewer_agent = Agent(
     model=LiteLLM(id="anthropic/claude-sonnet-4-6", top_p=None, temperature=1),
     instructions=REVIEWER_SYSTEM_PROMPT,
 )
+
+
+def run_standalone(payload: dict) -> dict:
+    """Run the Reviewer against {metadata, classification, standards} payload; return ReviewFindings dict."""
+    import json
+    from src.models import PRClassification, PRMetadata
+    metadata = PRMetadata.model_validate(payload["metadata"])
+    classification = PRClassification.model_validate(payload["classification"])
+    standards_text = payload.get("standards", "(none)")
+    prompt = (
+        f"Metadata: {metadata.model_dump_json()}\n"
+        f"Classification: {classification.model_dump_json()}\n"
+        f"Applicable Standards:\n{standards_text}"
+    )
+    result = reviewer_agent.run(prompt)
+    content = result.content
+    if isinstance(content, str):
+        return json.loads(content)
+    return content.model_dump()
+
+
+if __name__ == "__main__":
+    import json
+    import sys
+    try:
+        payload = json.load(sys.stdin)
+        print(json.dumps(run_standalone(payload), indent=2))
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)

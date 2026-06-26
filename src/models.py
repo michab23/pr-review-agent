@@ -73,3 +73,6 @@ class PipelineState(BaseModel):
 
     total_cost_usd: float = 0.0
     error: Optional[str] = None
+
+    degraded: bool = False
+    agents_failed: list[str] = []

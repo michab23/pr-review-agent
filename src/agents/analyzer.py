@@ -34,3 +34,26 @@ analyzer_agent = Agent(
     model=LiteLLM(id="anthropic/claude-haiku-4-5-20251001", top_p=None, temperature=1),
     instructions=ANALYZER_SYSTEM_PROMPT,
 )
+
+
+def run_standalone(payload: dict) -> dict:
+    """Run the Analyzer against a PRMetadata payload; return PRClassification dict."""
+    import json
+    from src.models import PRMetadata
+    metadata = PRMetadata.model_validate(payload)
+    result = analyzer_agent.run(str(metadata.model_dump()))
+    content = result.content
+    if isinstance(content, str):
+        return json.loads(content)
+    return content.model_dump()
+
+
+if __name__ == "__main__":
+    import json
+    import sys
+    try:
+        payload = json.load(sys.stdin)
+        print(json.dumps(run_standalone(payload), indent=2))
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
