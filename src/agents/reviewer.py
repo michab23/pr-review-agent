@@ -1,6 +1,7 @@
 # Agent 2: Reviewer — see spec/spec.md §3 for role, tools, system prompt, and reflection step
 from agno.agent import Agent
 from agno.models.litellm import LiteLLM
+from langfuse import get_client, observe
 
 REVIEWER_SYSTEM_PROMPT = """\
 You are a senior code reviewer. You review pull requests against the team's coding standards.
@@ -51,6 +52,7 @@ reviewer_agent = Agent(
 )
 
 
+@observe(name="reviewer")
 def run_standalone(payload: dict) -> dict:
     """Run the Reviewer against {metadata, classification, standards} payload; return ReviewFindings dict."""
     import json
@@ -81,8 +83,15 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
     try:
+        from src.utils import setup_langfuse_tracing
+        setup_langfuse_tracing()
+    except RuntimeError:
+        pass  # Langfuse env vars not set; run without tracing
+    try:
         payload = json.load(sys.stdin)
         print(json.dumps(run_standalone(payload), indent=2))
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
+    finally:
+        get_client().flush()

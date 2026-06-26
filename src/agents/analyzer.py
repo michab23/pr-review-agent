@@ -1,6 +1,7 @@
 # Agent 1: Analyzer — see spec/spec.md §3 for role, tools, system prompt, and risk routing table
 from agno.agent import Agent
 from agno.models.litellm import LiteLLM
+from langfuse import get_client, observe
 
 ANALYZER_SYSTEM_PROMPT = """\
 You are a PR risk classifier. Given a pull request diff and metadata, your job is to:
@@ -36,6 +37,7 @@ analyzer_agent = Agent(
 )
 
 
+@observe(name="analyzer")
 def run_standalone(payload: dict) -> dict:
     """Run the Analyzer against a PRMetadata payload; return PRClassification dict."""
     import json
@@ -59,8 +61,15 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
     try:
+        from src.utils import setup_langfuse_tracing
+        setup_langfuse_tracing()
+    except RuntimeError:
+        pass  # Langfuse env vars not set; run without tracing
+    try:
         payload = json.load(sys.stdin)
         print(json.dumps(run_standalone(payload), indent=2))
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
+    finally:
+        get_client().flush()

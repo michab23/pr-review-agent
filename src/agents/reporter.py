@@ -3,6 +3,7 @@ import json
 
 from agno.agent import Agent
 from agno.models.litellm import LiteLLM
+from langfuse import get_client, observe
 
 REPORTER_SYSTEM_PROMPT = """\
 You are a technical writer formatting a code review for a GitHub PR comment.
@@ -22,6 +23,7 @@ reporter_agent = Agent(
 )
 
 
+@observe(name="reporter")
 def run_standalone(payload: dict) -> str:
     """Run the Reporter against {metadata, findings, run_id, cost_usd} payload; return formatted comment."""
     from src.models import PRMetadata, ReviewFindings
@@ -52,8 +54,15 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
     try:
+        from src.utils import setup_langfuse_tracing
+        setup_langfuse_tracing()
+    except RuntimeError:
+        pass  # Langfuse env vars not set; run without tracing
+    try:
         payload = json.load(sys.stdin)
         print(run_standalone(payload))
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
+    finally:
+        get_client().flush()
