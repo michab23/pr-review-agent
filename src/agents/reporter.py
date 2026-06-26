@@ -1,4 +1,6 @@
 # Agent 3: Reporter — see spec/spec.md §3 for role, HITL behavior, and comment format
+import json
+
 from agno.agent import Agent
 from agno.models.litellm import LiteLLM
 
@@ -18,3 +20,40 @@ reporter_agent = Agent(
     model=LiteLLM(id="anthropic/claude-sonnet-4-6", top_p=None, temperature=1),
     instructions=REPORTER_SYSTEM_PROMPT,
 )
+
+
+def run_standalone(payload: dict) -> str:
+    """Run the Reporter against {metadata, findings, run_id, cost_usd} payload; return formatted comment."""
+    from src.models import PRMetadata, ReviewFindings
+    metadata = PRMetadata.model_validate(payload["metadata"])
+    findings = ReviewFindings.model_validate(payload["findings"])
+    run_id = payload.get("run_id", "standalone")
+    cost_usd = float(payload.get("cost_usd", 0.0))
+    prompt = (
+        f"Metadata: {metadata.model_dump_json()}\n"
+        f"Findings: {findings.model_dump_json()}\n"
+        f"Run ID: {run_id}\n"
+        f"Cost USD: {cost_usd:.4f}"
+    )
+    result = reporter_agent.run(prompt)
+    content = result.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, dict):
+        return json.dumps(content, indent=2)
+    if hasattr(content, "model_dump_json"):
+        return content.model_dump_json(indent=2)
+    raise TypeError(f"Unexpected reporter output type: {type(content).__name__}")
+
+
+if __name__ == "__main__":
+    import json
+    import sys
+    from dotenv import load_dotenv
+    load_dotenv()
+    try:
+        payload = json.load(sys.stdin)
+        print(run_standalone(payload))
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)

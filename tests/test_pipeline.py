@@ -307,3 +307,264 @@ class TestPipelineRun:
         state1 = self._run_with_mocks()
         state2 = self._run_with_mocks()
         assert state1.run_id != state2.run_id
+
+
+# ---------------------------------------------------------------------------
+# Shared degradation helpers
+# ---------------------------------------------------------------------------
+
+def _run_degraded(agent_patch: str, side_effect, approved: bool = False):
+    """Run pipeline with one agent patched to raise, all others mocked normally."""
+    from src.pipeline import run
+
+    metadata = _fake_metadata()
+    classification = _fake_classification()
+    findings = _fake_findings()
+
+    mock_analyzer = MagicMock()
+    mock_analyzer.run.return_value = MagicMock(content=classification)
+
+    mock_reviewer = MagicMock()
+    mock_reviewer.run.return_value = MagicMock(content=findings)
+    mock_reviewer.model = None
+
+    mock_reporter = MagicMock()
+    mock_reporter.run.return_value = MagicMock(content="## Review\nApproved.")
+
+    agent_mocks = {
+        "src.pipeline.analyzer_agent": mock_analyzer,
+        "src.pipeline.reviewer_agent": mock_reviewer,
+        "src.pipeline.reporter_agent": mock_reporter,
+    }
+    agent_mocks[agent_patch] = MagicMock(**{"run.side_effect": side_effect})
+
+    with (
+        patch("src.pipeline.get_pr_metadata", return_value=metadata),
+        patch("src.pipeline.validate_diff", side_effect=lambda d: d),
+        patch("src.pipeline.analyzer_agent", agent_mocks["src.pipeline.analyzer_agent"]),
+        patch("src.pipeline.reviewer_agent", agent_mocks["src.pipeline.reviewer_agent"]),
+        patch("src.pipeline.reporter_agent", agent_mocks["src.pipeline.reporter_agent"]),
+        patch("src.pipeline.human_approval_gate", return_value=approved),
+        patch("src.pipeline.post_pr_comment", return_value="https://github.com/comment/1"),
+        patch("src.pipeline.log_structured_trace"),
+        patch("src.pipeline.langfuse"),
+    ):
+        return run("https://github.com/acme/repo/pull/7")
+
+
+# ---------------------------------------------------------------------------
+# T010: TestAnalyzerDegradation
+# ---------------------------------------------------------------------------
+
+class TestAnalyzerDegradation:
+    def test_analyzer_failure_uses_medium_fallback(self):
+        state = _run_degraded("src.pipeline.analyzer_agent", RuntimeError("boom"))
+        assert state.classification.risk_level.value == "medium"
+        assert state.degraded is True
+        assert "analyzer" in state.agents_failed
+        assert state.error is None
+
+    def test_analyzer_none_uses_medium_fallback(self):
+        from src.pipeline import run
+
+        metadata = _fake_metadata()
+        findings = _fake_findings()
+        mock_reviewer = MagicMock()
+        mock_reviewer.run.return_value = MagicMock(content=findings)
+        mock_reviewer.model = None
+        mock_reporter = MagicMock()
+        mock_reporter.run.return_value = MagicMock(content="## Review")
+
+        with (
+            patch("src.pipeline.get_pr_metadata", return_value=metadata),
+            patch("src.pipeline.validate_diff", side_effect=lambda d: d),
+            patch("src.pipeline.analyzer_agent", None),
+            patch("src.pipeline.reviewer_agent", mock_reviewer),
+            patch("src.pipeline.reporter_agent", mock_reporter),
+            patch("src.pipeline.human_approval_gate", return_value=False),
+            patch("src.pipeline.log_structured_trace"),
+            patch("src.pipeline.langfuse"),
+        ):
+            state = run("https://github.com/acme/repo/pull/7")
+
+        assert state.classification.risk_level.value == "medium"
+        assert state.degraded is True
+        assert "analyzer" in state.agents_failed
+
+    def test_analyzer_failure_still_reaches_hitl(self):
+        mock_hitl = MagicMock(return_value=False)
+        from src.pipeline import run
+
+        metadata = _fake_metadata()
+        findings = _fake_findings()
+        mock_reviewer = MagicMock()
+        mock_reviewer.run.return_value = MagicMock(content=findings)
+        mock_reviewer.model = None
+        mock_reporter = MagicMock()
+        mock_reporter.run.return_value = MagicMock(content="## Review")
+
+        with (
+            patch("src.pipeline.get_pr_metadata", return_value=metadata),
+            patch("src.pipeline.validate_diff", side_effect=lambda d: d),
+            patch("src.pipeline.analyzer_agent", MagicMock(**{"run.side_effect": RuntimeError("boom")})),
+            patch("src.pipeline.reviewer_agent", mock_reviewer),
+            patch("src.pipeline.reporter_agent", mock_reporter),
+            patch("src.pipeline.human_approval_gate", mock_hitl),
+            patch("src.pipeline.log_structured_trace"),
+            patch("src.pipeline.langfuse"),
+        ):
+            run("https://github.com/acme/repo/pull/7")
+
+        mock_hitl.assert_called_once()
+
+    def test_analyzer_failure_warning_identifies_agent(self):
+        with patch("src.pipeline.console.print") as mock_print:
+            _run_degraded("src.pipeline.analyzer_agent", RuntimeError("timeout"))
+
+        warning_calls = " ".join(str(c) for c in mock_print.call_args_list)
+        assert "analyzer" in warning_calls.lower()
+        assert "medium" in warning_calls.lower()
+
+
+# ---------------------------------------------------------------------------
+# T010b: TestDegradedTraceLog
+# ---------------------------------------------------------------------------
+
+class TestDegradedTraceLog:
+    def test_degraded_state_serialized_in_trace(self, tmp_path):
+        import json as _json
+        from src.tools.trace import log_structured_trace
+
+        state = PipelineState(pr_url="https://github.com/x/y/pull/1", run_id="deg-001")
+        state.metadata = _fake_metadata()
+        state.classification = _fake_classification()
+        state.findings = _fake_findings()
+        state.degraded = True
+        state.agents_failed = ["analyzer"]
+
+        with patch("src.tools.trace.TRACES_DIR", tmp_path):
+            log_structured_trace(state)
+
+        entry = _json.loads(list(tmp_path.glob("*.jsonl"))[0].read_text())
+        assert entry["degraded"] is True
+        assert entry["agents_failed"] == ["analyzer"]
+
+
+# ---------------------------------------------------------------------------
+# T011: TestReviewerDegradation
+# ---------------------------------------------------------------------------
+
+class TestReviewerDegradation:
+    def test_reviewer_failure_uses_placeholder_findings(self):
+        state = _run_degraded("src.pipeline.reviewer_agent", RuntimeError("timeout"))
+        assert state.findings.verdict == "comment"
+        assert state.findings.confidence == 0.0
+        assert state.degraded is True
+        assert "reviewer" in state.agents_failed
+
+    def test_reviewer_failure_draft_comment_is_not_none(self):
+        state = _run_degraded("src.pipeline.reviewer_agent", RuntimeError("timeout"))
+        assert state.draft_comment is not None
+
+    def test_reviewer_failure_hitl_reached(self):
+        mock_hitl = MagicMock(return_value=False)
+        from src.pipeline import run
+
+        metadata = _fake_metadata()
+        mock_analyzer = MagicMock()
+        mock_analyzer.run.return_value = MagicMock(content=_fake_classification())
+        mock_reporter = MagicMock()
+        mock_reporter.run.return_value = MagicMock(content="## Review")
+
+        with (
+            patch("src.pipeline.get_pr_metadata", return_value=metadata),
+            patch("src.pipeline.validate_diff", side_effect=lambda d: d),
+            patch("src.pipeline.analyzer_agent", mock_analyzer),
+            patch("src.pipeline.reviewer_agent", MagicMock(**{"run.side_effect": RuntimeError("boom")})),
+            patch("src.pipeline.reporter_agent", mock_reporter),
+            patch("src.pipeline.human_approval_gate", mock_hitl),
+            patch("src.pipeline.log_structured_trace"),
+            patch("src.pipeline.langfuse"),
+        ):
+            run("https://github.com/acme/repo/pull/7")
+
+        mock_hitl.assert_called_once()
+
+    def test_reviewer_failure_warning_identifies_agent(self):
+        with patch("src.pipeline.console.print") as mock_print:
+            _run_degraded("src.pipeline.reviewer_agent", RuntimeError("timeout"))
+
+        warning_calls = " ".join(str(c) for c in mock_print.call_args_list)
+        assert "reviewer" in warning_calls.lower()
+
+
+# ---------------------------------------------------------------------------
+# T012: TestReporterDegradation
+# ---------------------------------------------------------------------------
+
+class TestReporterDegradation:
+    def test_reporter_failure_uses_raw_findings(self):
+        state = _run_degraded("src.pipeline.reporter_agent", RuntimeError("timeout"))
+        assert state.draft_comment is not None
+        assert "Reporter Unavailable" in state.draft_comment
+        assert state.degraded is True
+        assert "reporter" in state.agents_failed
+
+    def test_reporter_failure_hitl_reached(self):
+        mock_hitl = MagicMock(return_value=False)
+        from src.pipeline import run
+
+        metadata = _fake_metadata()
+        mock_analyzer = MagicMock()
+        mock_analyzer.run.return_value = MagicMock(content=_fake_classification())
+        mock_reviewer = MagicMock()
+        mock_reviewer.run.return_value = MagicMock(content=_fake_findings())
+        mock_reviewer.model = None
+
+        with (
+            patch("src.pipeline.get_pr_metadata", return_value=metadata),
+            patch("src.pipeline.validate_diff", side_effect=lambda d: d),
+            patch("src.pipeline.analyzer_agent", mock_analyzer),
+            patch("src.pipeline.reviewer_agent", mock_reviewer),
+            patch("src.pipeline.reporter_agent", MagicMock(**{"run.side_effect": RuntimeError("boom")})),
+            patch("src.pipeline.human_approval_gate", mock_hitl),
+            patch("src.pipeline.log_structured_trace"),
+            patch("src.pipeline.langfuse"),
+        ):
+            run("https://github.com/acme/repo/pull/7")
+
+        mock_hitl.assert_called_once()
+
+    def test_reporter_failure_can_post_fallback(self):
+        from src.pipeline import run
+
+        metadata = _fake_metadata()
+        mock_analyzer = MagicMock()
+        mock_analyzer.run.return_value = MagicMock(content=_fake_classification())
+        mock_reviewer = MagicMock()
+        mock_reviewer.run.return_value = MagicMock(content=_fake_findings())
+        mock_reviewer.model = None
+        mock_post = MagicMock(return_value="https://github.com/comment/1")
+
+        with (
+            patch("src.pipeline.get_pr_metadata", return_value=metadata),
+            patch("src.pipeline.validate_diff", side_effect=lambda d: d),
+            patch("src.pipeline.analyzer_agent", mock_analyzer),
+            patch("src.pipeline.reviewer_agent", mock_reviewer),
+            patch("src.pipeline.reporter_agent", MagicMock(**{"run.side_effect": RuntimeError("boom")})),
+            patch("src.pipeline.human_approval_gate", return_value=True),
+            patch("src.pipeline.post_pr_comment", mock_post),
+            patch("src.pipeline.log_structured_trace"),
+            patch("src.pipeline.langfuse"),
+        ):
+            state = run("https://github.com/acme/repo/pull/7")
+
+        assert state.posted_comment_url == "https://github.com/comment/1"
+        mock_post.assert_called_once()
+
+    def test_reporter_failure_warning_identifies_agent(self):
+        with patch("src.pipeline.console.print") as mock_print:
+            _run_degraded("src.pipeline.reporter_agent", RuntimeError("timeout"))
+
+        warning_calls = " ".join(str(c) for c in mock_print.call_args_list)
+        assert "reporter" in warning_calls.lower()

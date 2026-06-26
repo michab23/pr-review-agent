@@ -1,6 +1,5 @@
-# Pipeline entry point — see spec/spec.md §4 for full agent wiring and HITL behavior
+# Pipeline entry point — see specs/003-agent-independence/plan.md for agent wiring, HITL, and graceful-degradation behavior
 import json
-import re
 import select
 import sys
 from uuid import uuid4
@@ -10,14 +9,27 @@ from langfuse import get_client, observe
 from rich.console import Console
 from rich.panel import Panel
 
-from src.agents.analyzer import RISK_MODEL_MAP, analyzer_agent
-from src.agents.reporter import reporter_agent
-from src.agents.reviewer import reviewer_agent
-from src.models import PRClassification, PipelineState, ReviewFindings
+try:
+    from src.agents.analyzer import RISK_MODEL_MAP as _RISK_MODEL_MAP, analyzer_agent
+except ImportError:
+    _RISK_MODEL_MAP = None
+    analyzer_agent = None
+
+try:
+    from src.agents.reviewer import reviewer_agent
+except ImportError:
+    reviewer_agent = None
+
+try:
+    from src.agents.reporter import reporter_agent
+except ImportError:
+    reporter_agent = None
+
+from src.models import ChangeType, PRClassification, PipelineState, ReviewFindings, RiskLevel
 from src.tools.github import get_pr_metadata, post_pr_comment, validate_diff
 from src.tools.team_brain import get_team_standards
 from src.tools.trace import log_structured_trace
-from src.utils import setup_langfuse_tracing
+from src.utils import extract_json as _extract_json, setup_langfuse_tracing
 
 load_dotenv()
 
@@ -25,24 +37,6 @@ console = Console()
 langfuse = get_client()
 
 HITL_TIMEOUT_SECONDS = 60
-
-
-def _extract_json(text: str) -> str:
-    """Extract the outermost JSON object from LLM output, handling markdown fences."""
-    # Strip outer markdown fence (greedy so inner fences inside string values are kept)
-    text = re.sub(r"^```(?:json)?\s*\n(.*)\n```\s*$", r"\1", text.strip(), flags=re.DOTALL)
-    text = text.strip()
-    start = text.find("{")
-    if start == -1:
-        raise ValueError(f"No JSON object found in LLM output: {text[:200]!r}")
-    try:
-        obj, _ = json.JSONDecoder().raw_decode(text, start)
-    except json.JSONDecodeError as e:
-        raise ValueError(
-            f"Failed to parse JSON from LLM output: {e}. "
-            f"Text prefix: {text[start:start + 200]!r}"
-        ) from e
-    return json.dumps(obj)
 
 
 _JSON_RETRY_SUFFIX = (
@@ -68,6 +62,30 @@ def _run_agent_json(agent, prompt: str, name: str):
             return _extract_json(content)
         except ValueError as exc:
             raise ValueError(f"[{name}] failed to return valid JSON after retry: {exc}") from exc
+
+
+_FALLBACK_CLASSIFICATION = PRClassification(
+    risk_level=RiskLevel.MEDIUM,
+    change_types=[ChangeType.FEATURE],
+    risk_rationale="Analyzer unavailable — defaulting to medium risk",
+    model_to_use="anthropic/claude-sonnet-4-6",
+    files_of_concern=[],
+)
+
+_FALLBACK_FINDINGS = ReviewFindings(
+    summary="Reviewer unavailable — automated review could not be completed.",
+    findings=[],
+    verdict="comment",
+    confidence=0.0,
+)
+
+
+def _reporter_fallback(findings: ReviewFindings) -> str:
+    return (
+        "## ⚠️ Reporter Unavailable\n\n"
+        "The Reporter agent failed. Raw findings are shown below.\n\n"
+        f"```json\n{findings.model_dump_json(indent=2)}\n```"
+    )
 
 
 _CHANGE_TYPE_TOPICS = {
@@ -100,43 +118,92 @@ def run(pr_url: str) -> PipelineState:
 
     try:
         # Agent 1: Analyzer
-        metadata = get_pr_metadata(pr_url)
-        metadata = metadata.model_copy(update={"diff": validate_diff(metadata.diff)})
-        raw = _run_agent_json(analyzer_agent, str(metadata.model_dump()), "analyzer")
+        metadata = None
+        try:
+            metadata = get_pr_metadata(pr_url)
+            metadata = metadata.model_copy(update={"diff": validate_diff(metadata.diff)})
+            if analyzer_agent is None:
+                raise ImportError("analyzer module not available")
+            raw = _run_agent_json(analyzer_agent, str(metadata.model_dump()), "analyzer")
+            if isinstance(raw, str):
+                classification = PRClassification.model_validate_json(raw)
+            elif isinstance(raw, dict):
+                classification = PRClassification.model_validate(raw)
+            elif isinstance(raw, PRClassification):
+                classification = raw
+            else:
+                raise TypeError(f"Unexpected analyzer output type: {type(raw).__name__}")
+        except Exception as exc:
+            if metadata is None:
+                raise
+            console.print(f"[yellow]⚠ Analyzer unavailable ({exc}); using medium-risk fallback.[/yellow]")
+            classification = _FALLBACK_CLASSIFICATION
+            state.degraded = True
+            state.agents_failed.append("analyzer")
         state.metadata = metadata
-        classification = raw if not isinstance(raw, str) else PRClassification.model_validate_json(raw)
         state.classification = classification
 
-        # Agent 2: Reviewer — model resolved from risk level at runtime
-        from agno.models.litellm import LiteLLM
-        model_id = RISK_MODEL_MAP[state.classification.risk_level.value]
-        reviewer_agent.model = LiteLLM(id=model_id, top_p=None, temperature=1)
-
-        # Pre-fetch standards so reviewer gets them in-prompt (avoids Agno tool-call conflicts
-        # between output_schema structured-output machinery and user-registered tools).
-        topics = {t for ct in state.classification.change_types
-                  for t in _CHANGE_TYPE_TOPICS.get(ct.value, [])}
-        standards = get_team_standards(sorted(topics)) if topics else []
-        standards_text = "\n\n---\n\n".join(standards) if standards else "(none)"
-
-        raw_findings = _run_agent_json(
-            reviewer_agent,
-            f"Metadata: {state.metadata.model_dump_json()}\n"
-            f"Classification: {state.classification.model_dump_json()}\n"
-            f"Applicable Standards:\n{standards_text}",
-            "reviewer",
-        )
-        findings = raw_findings if not isinstance(raw_findings, str) else ReviewFindings.model_validate_json(raw_findings)
+        # Agent 2: Reviewer — model tier resolved from risk level at runtime
+        try:
+            from agno.models.litellm import LiteLLM
+            risk_map = _RISK_MODEL_MAP or {
+                "low": "anthropic/claude-haiku-4-5-20251001",
+                "medium": "anthropic/claude-sonnet-4-6",
+                "high": "anthropic/claude-opus-4-8",
+            }
+            model_id = risk_map[state.classification.risk_level.value]
+            if reviewer_agent is None:
+                raise ImportError("reviewer module not available")
+            reviewer_agent.model = LiteLLM(id=model_id, top_p=None, temperature=1)
+            # Pre-fetch standards so reviewer gets them in-prompt (avoids Agno tool-call conflicts
+            # between output_schema structured-output machinery and user-registered tools).
+            topics = {t for ct in state.classification.change_types
+                      for t in _CHANGE_TYPE_TOPICS.get(ct.value, [])}
+            standards = get_team_standards(sorted(topics)) if topics else []
+            standards_text = "\n\n---\n\n".join(standards) if standards else "(none)"
+            raw_findings = _run_agent_json(
+                reviewer_agent,
+                f"Metadata: {state.metadata.model_dump_json()}\n"
+                f"Classification: {state.classification.model_dump_json()}\n"
+                f"Applicable Standards:\n{standards_text}",
+                "reviewer",
+            )
+            if isinstance(raw_findings, str):
+                findings = ReviewFindings.model_validate_json(raw_findings)
+            elif isinstance(raw_findings, dict):
+                findings = ReviewFindings.model_validate(raw_findings)
+            elif isinstance(raw_findings, ReviewFindings):
+                findings = raw_findings
+            else:
+                raise TypeError(f"Unexpected reviewer output type: {type(raw_findings).__name__}")
+        except Exception as exc:
+            console.print(f"[yellow]⚠ Reviewer unavailable ({exc}); using placeholder findings.[/yellow]")
+            findings = _FALLBACK_FINDINGS
+            state.degraded = True
+            if "reviewer" not in state.agents_failed:
+                state.agents_failed.append("reviewer")
         state.findings = findings
 
         # Agent 3: Reporter — produces draft comment
-        draft_result = reporter_agent.run(
-            f"Metadata: {state.metadata.model_dump_json()}\n"
-            f"Findings: {state.findings.model_dump_json()}\n"
-            f"Run ID: {state.run_id}\n"
-            f"Cost USD: {state.total_cost_usd:.4f}"
-        )
-        state.draft_comment = draft_result.content
+        try:
+            if reporter_agent is None:
+                raise ImportError("reporter module not available")
+            draft_result = reporter_agent.run(
+                f"Metadata: {state.metadata.model_dump_json()}\n"
+                f"Findings: {state.findings.model_dump_json()}\n"
+                f"Run ID: {state.run_id}\n"
+                f"Cost USD: {state.total_cost_usd:.4f}"
+            )
+            content = draft_result.content
+            if not isinstance(content, str):
+                raise TypeError(f"Reporter returned {type(content).__name__} instead of markdown string")
+            state.draft_comment = content
+        except Exception as exc:
+            console.print(f"[yellow]⚠ Reporter unavailable ({exc}); showing raw findings.[/yellow]")
+            state.draft_comment = _reporter_fallback(state.findings)
+            state.degraded = True
+            if "reporter" not in state.agents_failed:
+                state.agents_failed.append("reporter")
 
         # HITL gate
         approved = human_approval_gate(state)

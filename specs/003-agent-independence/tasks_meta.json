@@ -1,0 +1,21 @@
+{
+  "feature_dir": "specs/003-agent-independence",
+  "version": "1.0",
+  "tasks": {
+    "T001": {"description": "Extend PipelineState with degraded and agents_failed fields", "files": "src/models.py", "mode": "SYNC", "story": null, "status": "pending"},
+    "T002": {"description": "Analyzer run_standalone + __main__ entrypoint", "files": "src/agents/analyzer.py", "mode": "ASYNC", "story": "US1", "status": "pending"},
+    "T003": {"description": "Reviewer run_standalone + __main__ entrypoint", "files": "src/agents/reviewer.py", "mode": "ASYNC", "story": "US1", "status": "pending"},
+    "T004": {"description": "Reporter run_standalone + __main__ entrypoint", "files": "src/agents/reporter.py", "mode": "ASYNC", "story": "US1", "status": "pending"},
+    "T005": {"description": "Standalone subprocess integration tests", "files": "tests/test_agents_standalone.py", "mode": "ASYNC", "story": "US1", "status": "pending"},
+    "T006": {"description": "Lazy imports and fallback constants in pipeline.py", "files": "src/pipeline.py", "mode": "SYNC", "story": "US2", "status": "pending"},
+    "T007": {"description": "Wrap Analyzer step in try/except with fallback", "files": "src/pipeline.py", "mode": "SYNC", "story": "US2", "status": "pending"},
+    "T008": {"description": "Wrap Reviewer step in try/except with fallback", "files": "src/pipeline.py", "mode": "SYNC", "story": "US3", "status": "pending"},
+    "T009": {"description": "Wrap Reporter step in try/except with fallback", "files": "src/pipeline.py", "mode": "SYNC", "story": "US4", "status": "pending"},
+    "T010": {"description": "TestAnalyzerDegradation test class (4 methods incl. warning-content + trace assertions)", "files": "tests/test_pipeline.py", "mode": "SYNC", "story": "US2", "status": "pending"},
+    "T010b": {"description": "TestDegradedTraceLog — verify degraded+agents_failed in log_structured_trace output", "files": "tests/test_pipeline.py", "mode": "SYNC", "story": "US2", "status": "pending"},
+    "T011": {"description": "TestReviewerDegradation test class", "files": "tests/test_pipeline.py", "mode": "SYNC", "story": "US3", "status": "pending"},
+    "T012": {"description": "TestReporterDegradation test class", "files": "tests/test_pipeline.py", "mode": "SYNC", "story": "US4", "status": "pending"},
+    "T013": {"description": "Update pipeline.py header comment", "files": "src/pipeline.py", "mode": "ASYNC", "story": null, "status": "pending"},
+    "T014": {"description": "Run full test suite and verify no regressions", "files": "tests/", "mode": "SYNC", "story": null, "status": "pending"}
+  }
+}

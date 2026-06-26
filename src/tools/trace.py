@@ -26,6 +26,8 @@ def log_structured_trace(state: PipelineState) -> None:
         "models_used": [state.classification.model_to_use] if state.classification else [],
         "error": state.error,
         "langfuse_trace_url": None,  # populated after flush
+        "degraded": state.degraded,
+        "agents_failed": state.agents_failed,
     }
 
     with path.open("a") as f:
