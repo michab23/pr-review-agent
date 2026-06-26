@@ -1,11 +1,14 @@
-# Team Brain MCP client — calls the FastMCP server via stdio subprocess using the mcp SDK.
-# ADR-002: stdio transport chosen; mcp SDK handles JSON-RPC handshake and tool calls.
+# Team Brain MCP client — connects to the standalone SSE server via the mcp SDK.
 import asyncio
 import json
+import os
+import sys
 from pathlib import Path
 
+import httpx
+
 _STANDARDS_DIR = Path(__file__).parent.parent / "team_brain" / "standards"
-_SERVER_MODULE = "src.team_brain.server"
+_DEFAULT_URL = "http://127.0.0.1:8000/sse"
 
 
 def get_team_standards(topics: list[str]) -> list[str]:
@@ -15,21 +18,22 @@ def get_team_standards(topics: list[str]) -> list[str]:
     Returns a list of standard file contents, one entry per matched topic.
     """
     try:
-        return asyncio.run(_fetch_via_mcp(topics))
-    except Exception:
-        # Fall back to direct file read if MCP subprocess fails (e.g., import errors during dev)
+        return asyncio.run(_fetch_via_http(topics))
+    except (OSError, httpx.NetworkError, httpx.TimeoutException) as exc:
+        url = os.environ.get("TEAM_BRAIN_URL", _DEFAULT_URL)
+        print(
+            f"Warning: Team Brain MCP server unreachable at {url} — falling back to direct file read ({exc})",
+            file=sys.stderr,
+        )
         return _fetch_direct(topics)
 
 
-async def _fetch_via_mcp(topics: list[str]) -> list[str]:
-    from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
+async def _fetch_via_http(topics: list[str]) -> list[str]:
+    from mcp import ClientSession
+    from mcp.client.sse import sse_client
 
-    params = StdioServerParameters(
-        command="python",
-        args=["-m", _SERVER_MODULE],
-    )
-    async with stdio_client(params) as (read, write):
+    url = os.environ.get("TEAM_BRAIN_URL", _DEFAULT_URL)
+    async with sse_client(url) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool("get_team_standards", {"topics": topics})
@@ -43,7 +47,7 @@ async def _fetch_via_mcp(topics: list[str]) -> list[str]:
 
 
 def _fetch_direct(topics: list[str]) -> list[str]:
-    """Direct file read fallback — bypasses MCP protocol, used only if subprocess fails."""
+    """Direct file read fallback — bypasses MCP protocol, used only if server is unreachable."""
     results = []
     for topic in topics:
         path = _STANDARDS_DIR / f"{topic}.md"
