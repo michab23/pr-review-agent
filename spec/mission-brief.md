@@ -13,7 +13,7 @@ Build a multi-agent system that automatically reviews GitHub pull requests — c
 ## Constraints
 
 ### Architecture
-- Minimum 3 agents, each with a single defined role; removing any one agent must break the pipeline
+- Minimum 3 agents, each with a single defined role; every agent must be independently executable as a standalone component — removing any single agent must cause graceful degradation, not complete pipeline failure
 - Orchestration via **Agno** (sequential multi-agent pipeline, explicit agent roles, typed I/O)
 - All LLM calls routed via **LiteLLM** (provider-agnostic; model IDs use `anthropic/model-name` format)
 - Agent I/O validated via **Pydantic** models — no untyped dicts passed between agents
