@@ -49,7 +49,7 @@
 
 - [ ] T004 [P] [ASYNC] [US1] Add `run_standalone(payload: dict) -> str` function and `if __name__ == "__main__":` entrypoint to `src/agents/reporter.py` — reads `{"metadata": {...}, "findings": {...}, "run_id": "...", "cost_usd": 0.0}` JSON from stdin, emits formatted markdown comment string to stdout (plan.md T-05)
 
-- [ ] T005 [ASYNC] [US1] Create `tests/test_agents_standalone.py` with three `@pytest.mark.integration` test classes (`TestAnalyzerStandalone`, `TestReviewerStandalone`, `TestReporterStandalone`) that use `subprocess.run` to invoke each agent via `python -m src.agents.<name>` with a JSON fixture on stdin and verify exit code 0 and valid output (plan.md T-07). Depends on T002, T003, T004.
+- [ ] T005 [ASYNC] [US1] Create `tests/test_agents_standalone.py` with three `@pytest.mark.integration` test classes (`TestAnalyzerStandalone`, `TestReviewerStandalone`, `TestReporterStandalone`) that use `subprocess.run` to invoke each agent via `python -m src.agents.<name>` with a JSON fixture on stdin. Each class must contain **two** test methods: (1) `test_valid_input_returns_output` — feed a valid fixture, assert exit code 0 and stdout parses to the expected Pydantic model; (2) `test_invalid_input_exits_with_error` — feed `"{}"` (empty JSON object, fails Pydantic validation), assert exit code 1 and stderr is non-empty. (plan.md T-07; covers FR-001 and FR-002). Depends on T002, T003, T004.
 
 **Checkpoint**: Each agent independently executable. Verify with `echo '<fixture>' | python -m src.agents.analyzer`.
 
@@ -77,13 +77,15 @@
 
 > Note: T010–T012 all append to `tests/test_pipeline.py` and must run sequentially.
 
-- [ ] T010 [SYNC] [US2] Add `TestAnalyzerDegradation` test class to `tests/test_pipeline.py` with three test methods: `test_analyzer_failure_uses_medium_fallback`, `test_analyzer_none_uses_medium_fallback`, `test_analyzer_failure_still_reaches_hitl` — see plan.md T-06. Depends on T007.
+- [ ] T010 [SYNC] [US2] Add `TestAnalyzerDegradation` test class to `tests/test_pipeline.py` with **four** test methods: `test_analyzer_failure_uses_medium_fallback`, `test_analyzer_none_uses_medium_fallback`, `test_analyzer_failure_still_reaches_hitl`, `test_analyzer_failure_warning_identifies_agent` — the last method patches `src.pipeline.console.print` (or uses `capsys`) and asserts the warning string contains `"analyzer"` and `"medium"` (covers FR-006). See plan.md T-06. Depends on T007.
 
-- [ ] T011 [SYNC] [US3] Add `TestReviewerDegradation` test class to `tests/test_pipeline.py` with three test methods: `test_reviewer_failure_uses_placeholder_findings`, `test_reviewer_failure_draft_comment_is_not_none`, `test_reviewer_failure_hitl_reached` — see plan.md T-06. Depends on T008, T010.
+- [ ] T011 [SYNC] [US3] Add `TestReviewerDegradation` test class to `tests/test_pipeline.py` with **four** test methods: `test_reviewer_failure_uses_placeholder_findings`, `test_reviewer_failure_draft_comment_is_not_none`, `test_reviewer_failure_hitl_reached`, `test_reviewer_failure_warning_identifies_agent` — the last method asserts the warning string contains `"reviewer"` (covers FR-006). See plan.md T-06. Depends on T008, T010.
 
-- [ ] T012 [SYNC] [US4] Add `TestReporterDegradation` test class to `tests/test_pipeline.py` with three test methods: `test_reporter_failure_uses_raw_findings`, `test_reporter_failure_hitl_reached`, `test_reporter_failure_can_post_fallback` — see plan.md T-06. Depends on T009, T011.
+- [ ] T012 [SYNC] [US4] Add `TestReporterDegradation` test class to `tests/test_pipeline.py` with **four** test methods: `test_reporter_failure_uses_raw_findings`, `test_reporter_failure_hitl_reached`, `test_reporter_failure_can_post_fallback`, `test_reporter_failure_warning_identifies_agent` — the last method asserts the warning string contains `"reporter"` (covers FR-006). See plan.md T-06. Depends on T009, T011.
 
-**Checkpoint**: Run `pytest tests/test_pipeline.py` — all existing tests plus 9 new degradation tests should pass.
+- [ ] T010b [SYNC] [US2] Add `TestDegradedTraceLog` test class to `tests/test_pipeline.py` that calls `log_structured_trace` directly with a `PipelineState` where `degraded=True` and `agents_failed=["analyzer"]`, then reads the written JSON and asserts both fields appear in the output (covers FR-008 / SC-004). Use the real `log_structured_trace` (no mock) against a tmp path. Depends on T010.
+
+**Checkpoint**: Run `pytest tests/test_pipeline.py` — all existing tests plus 13 new tests (4+4+4+1) should pass.
 
 ---
 
