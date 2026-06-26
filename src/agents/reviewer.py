@@ -82,9 +82,11 @@ if __name__ == "__main__":
     import sys
     from dotenv import load_dotenv
     load_dotenv()
+    tracing_enabled = False
     try:
         from src.utils import setup_langfuse_tracing
         setup_langfuse_tracing()
+        tracing_enabled = True
     except RuntimeError:
         pass  # Langfuse env vars not set; run without tracing
     try:
@@ -94,4 +96,5 @@ if __name__ == "__main__":
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
     finally:
-        get_client().flush()
+        if tracing_enabled:
+            get_client().flush()
