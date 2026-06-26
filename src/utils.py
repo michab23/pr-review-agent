@@ -3,6 +3,7 @@ import os
 import re
 
 from langfuse import get_client
+from openinference.instrumentation.agno import AgnoInstrumentor
 
 
 def extract_json(text: str) -> str:
@@ -29,3 +30,4 @@ def setup_langfuse_tracing() -> None:
     if missing:
         raise RuntimeError(f"Missing LangFuse env vars: {', '.join(missing)}")
     get_client()
+    AgnoInstrumentor().instrument()

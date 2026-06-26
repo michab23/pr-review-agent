@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 from langfuse import get_client, observe
+from openinference.instrumentation.agno import AgnoInstrumentor
 from rich.console import Console
 from rich.panel import Panel
 
@@ -35,6 +36,7 @@ load_dotenv()
 
 console = Console()
 langfuse = get_client()
+AgnoInstrumentor().instrument()
 
 HITL_TIMEOUT_SECONDS = 60
 
