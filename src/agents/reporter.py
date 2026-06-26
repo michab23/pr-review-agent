@@ -1,4 +1,6 @@
 # Agent 3: Reporter — see spec/spec.md §3 for role, HITL behavior, and comment format
+import json
+
 from agno.agent import Agent
 from agno.models.litellm import LiteLLM
 
@@ -34,7 +36,14 @@ def run_standalone(payload: dict) -> str:
         f"Cost USD: {cost_usd:.4f}"
     )
     result = reporter_agent.run(prompt)
-    return result.content
+    content = result.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, dict):
+        return json.dumps(content, indent=2)
+    if hasattr(content, "model_dump_json"):
+        return content.model_dump_json(indent=2)
+    raise TypeError(f"Unexpected reporter output type: {type(content).__name__}")
 
 
 if __name__ == "__main__":

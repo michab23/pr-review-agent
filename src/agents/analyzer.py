@@ -46,7 +46,11 @@ def run_standalone(payload: dict) -> dict:
     content = result.content
     if isinstance(content, str):
         return json.loads(extract_json(content))
-    return content.model_dump()
+    if isinstance(content, dict):
+        return content
+    if hasattr(content, "model_dump"):
+        return content.model_dump()
+    raise TypeError(f"Unexpected analyzer output type: {type(content).__name__}")
 
 
 if __name__ == "__main__":

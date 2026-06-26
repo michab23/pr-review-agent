@@ -125,7 +125,14 @@ def run(pr_url: str) -> PipelineState:
             if analyzer_agent is None:
                 raise ImportError("analyzer module not available")
             raw = _run_agent_json(analyzer_agent, str(metadata.model_dump()), "analyzer")
-            classification = raw if not isinstance(raw, str) else PRClassification.model_validate_json(raw)
+            if isinstance(raw, str):
+                classification = PRClassification.model_validate_json(raw)
+            elif isinstance(raw, dict):
+                classification = PRClassification.model_validate(raw)
+            elif isinstance(raw, PRClassification):
+                classification = raw
+            else:
+                raise TypeError(f"Unexpected analyzer output type: {type(raw).__name__}")
         except Exception as exc:
             if metadata is None:
                 raise
@@ -161,7 +168,14 @@ def run(pr_url: str) -> PipelineState:
                 f"Applicable Standards:\n{standards_text}",
                 "reviewer",
             )
-            findings = raw_findings if not isinstance(raw_findings, str) else ReviewFindings.model_validate_json(raw_findings)
+            if isinstance(raw_findings, str):
+                findings = ReviewFindings.model_validate_json(raw_findings)
+            elif isinstance(raw_findings, dict):
+                findings = ReviewFindings.model_validate(raw_findings)
+            elif isinstance(raw_findings, ReviewFindings):
+                findings = raw_findings
+            else:
+                raise TypeError(f"Unexpected reviewer output type: {type(raw_findings).__name__}")
         except Exception as exc:
             console.print(f"[yellow]⚠ Reviewer unavailable ({exc}); using placeholder findings.[/yellow]")
             findings = _FALLBACK_FINDINGS
@@ -180,7 +194,10 @@ def run(pr_url: str) -> PipelineState:
                 f"Run ID: {state.run_id}\n"
                 f"Cost USD: {state.total_cost_usd:.4f}"
             )
-            state.draft_comment = draft_result.content
+            content = draft_result.content
+            if not isinstance(content, str):
+                raise TypeError(f"Reporter returned {type(content).__name__} instead of markdown string")
+            state.draft_comment = content
         except Exception as exc:
             console.print(f"[yellow]⚠ Reporter unavailable ({exc}); showing raw findings.[/yellow]")
             state.draft_comment = _reporter_fallback(state.findings)
