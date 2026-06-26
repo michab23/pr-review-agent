@@ -11,7 +11,7 @@ What is the correct wording for the architectural constraint on agent independen
 
 ## Finding 1 — Multi-Agent Pattern: Fault Isolation
 
-**Source**: `/home/michael/dev/agentic-sdlc-wiki/wiki/concepts/multi-agent-pattern.md`
+**Source**: `agentic-sdlc-wiki: wiki/concepts/multi-agent-pattern.md`
 
 **Relevant excerpt**:
 > **Fault Isolation**: one agent failing doesn't necessarily fail the whole system
@@ -29,7 +29,7 @@ What is the correct wording for the architectural constraint on agent independen
 
 ## Finding 2 — Sequential Workflow Pattern: Reusable Components
 
-**Source**: `/home/michael/dev/agentic-sdlc-wiki/wiki/concepts/sequential-workflow-pattern.md`
+**Source**: `agentic-sdlc-wiki: wiki/concepts/sequential-workflow-pattern.md`
 
 **Relevant excerpt**:
 > **Reusable components** — Clear separation of concerns. Easy to debug (each step is isolated).
@@ -40,7 +40,7 @@ What is the correct wording for the architectural constraint on agent independen
 
 ## Finding 3 — Lesson 6: Multi-Agent Pitfalls
 
-**Source**: `/home/michael/dev/agentic-sdlc-wiki/wiki/lessons/06-agentic-workflows.md`
+**Source**: `agentic-sdlc-wiki: wiki/lessons/06-agentic-workflows.md`
 
 **Relevant excerpt**:
 > **Multi-agent pitfalls**: Complexity Explosion, Cascading Failures, Context Fragmentation, Runaway Costs, Non-Determinism, Latency Chains, Orchestration Deadlocks. Principle: *"Start with the simplest architecture that could work."*
