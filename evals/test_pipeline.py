@@ -122,7 +122,7 @@ class TestReviewerHallucination:
         from dotenv import load_dotenv
         load_dotenv()
 
-        from src.agents.analyzer import analyzer_agent
+        from src.agents.analyzer import analyzer_agent, RISK_MODEL_MAP
         from src.agents.reviewer import reviewer_agent
         from agno.models.litellm import LiteLLM
         from src.tools.github import validate_diff
@@ -134,8 +134,8 @@ class TestReviewerHallucination:
         # Classify first to get model tier
         classification = analyzer_agent.run(str(metadata.model_dump())).content
 
-        # Override model and run reviewer
-        reviewer_agent.model = LiteLLM(id=classification.model_to_use)
+        # Override model using RISK_MODEL_MAP (same as pipeline) to guarantee valid LiteLLM model IDs
+        reviewer_agent.model = LiteLLM(id=RISK_MODEL_MAP[classification.risk_level.value], top_p=None, temperature=1)
         findings = reviewer_agent.run(
             f"Metadata: {metadata.model_dump_json()}\n"
             f"Classification: {classification.model_dump_json()}"

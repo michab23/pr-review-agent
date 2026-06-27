@@ -6,12 +6,28 @@ from langfuse import get_client, observe
 ANALYZER_SYSTEM_PROMPT = """\
 You are a PR risk classifier. Given a pull request diff and metadata, your job is to:
 1. Identify the type(s) of change (feature, bug_fix, refactor, security, docs, config, dependency)
-2. Assign a risk level: low (docs/config/trivial fixes), medium (features/refactors), \
-high (security-sensitive/auth/payments/data migrations/dependency bumps)
+2. Assign a risk level. Default is MEDIUM — only deviate with strong reason:
+   - low: Pure docs/comments (no code change), OR config-only changes with no new packages \
+and no logic change — e.g. linter/formatter config, minor version bumps of EXISTING \
+dependencies without CVEs. No new code paths, no new packages introduced.
+   - medium: Everything else — bug fixes of any size, new features, refactors, dependency \
+additions/upgrades without CVEs, behavioral changes, config value changes, missing auth or \
+validation (reviewer catches these). When in doubt between low and medium, choose MEDIUM.
+   - high: ONLY when code CONTAINS an active exploitable vulnerability: broken crypto \
+(MD5/SHA1 for passwords, hardcoded secrets/tokens in source), SQL/command injection, XSS, \
+or when implementing/modifying auth systems, payment flows, data migrations, or upgrading \
+dependencies with known CVEs.
 3. List the specific files that drove your risk rating
 4. Choose the review model: low→haiku, medium→sonnet, high→opus
 
-Be conservative: when in doubt, rate higher.
+Examples:
+- "Remove slice cap [:100] in pagination logic" → MEDIUM (behavioral code change)
+- "Add httpx + retry decorator" → MEDIUM (new dependency + behavior change)
+- "New feature endpoint (even if missing auth check)" → MEDIUM
+- "Update README.md only" → LOW
+- "Bump existing dep minor version + add linter config in pyproject.toml" → LOW (config-only, no new packages)
+- "MD5 password hashing" → HIGH (broken crypto in code)
+- "Hardcoded secret in source" → HIGH
 
 Return ONLY a valid JSON object — no markdown fences, no prose:
 {
@@ -30,10 +46,13 @@ RISK_MODEL_MAP = {
     "high": "anthropic/claude-opus-4-8",
 }
 
+from src.models import PRClassification
+
 analyzer_agent = Agent(
     name="analyzer",
     model=LiteLLM(id="anthropic/claude-haiku-4-5-20251001", top_p=None, temperature=1),
     instructions=ANALYZER_SYSTEM_PROMPT,
+    output_schema=PRClassification,
 )
 
 
