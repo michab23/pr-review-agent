@@ -1,28 +1,13 @@
-import json
 import os
-import re
 
 from langfuse import get_client
 from openinference.instrumentation.agno import AgnoInstrumentor
 
+from src.guardrails.validators import OutputValidator
+
 _instrumented = False
 
-
-def extract_json(text: str) -> str:
-    """Extract the outermost JSON object from LLM output, handling markdown fences."""
-    text = re.sub(r"^```(?:json)?\s*\n(.*)\n```\s*$", r"\1", text.strip(), flags=re.DOTALL)
-    text = text.strip()
-    start = text.find("{")
-    if start == -1:
-        raise ValueError(f"No JSON object found in LLM output: {text[:200]!r}")
-    try:
-        obj, _ = json.JSONDecoder().raw_decode(text, start)
-    except json.JSONDecodeError as e:
-        raise ValueError(
-            f"Failed to parse JSON from LLM output: {e}. "
-            f"Text prefix: {text[start:start + 200]!r}"
-        ) from e
-    return json.dumps(obj)
+extract_json = OutputValidator.extract_json
 
 
 def setup_langfuse_tracing() -> None:
