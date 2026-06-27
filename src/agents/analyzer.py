@@ -7,9 +7,9 @@ ANALYZER_SYSTEM_PROMPT = """\
 You are a PR risk classifier. Given a pull request diff and metadata, your job is to:
 1. Identify the type(s) of change (feature, bug_fix, refactor, security, docs, config, dependency)
 2. Assign a risk level. Default is MEDIUM — only deviate with strong reason:
-   - low: ONLY when the entire diff is .md files, docstrings, or inline comments with \
-ZERO code logic changes and ZERO dependency changes. If any source code (.py, .toml, .yaml, \
-etc.) is modified with behavioral effect, it is NOT low.
+   - low: Pure docs/comments (no code change), OR config-only changes with no new packages \
+and no logic change — e.g. linter/formatter config, minor version bumps of EXISTING \
+dependencies without CVEs. No new code paths, no new packages introduced.
    - medium: Everything else — bug fixes of any size, new features, refactors, dependency \
 additions/upgrades without CVEs, behavioral changes, config value changes, missing auth or \
 validation (reviewer catches these). When in doubt between low and medium, choose MEDIUM.
@@ -25,6 +25,7 @@ Examples:
 - "Add httpx + retry decorator" → MEDIUM (new dependency + behavior change)
 - "New feature endpoint (even if missing auth check)" → MEDIUM
 - "Update README.md only" → LOW
+- "Bump existing dep minor version + add linter config in pyproject.toml" → LOW (config-only, no new packages)
 - "MD5 password hashing" → HIGH (broken crypto in code)
 - "Hardcoded secret in source" → HIGH
 
