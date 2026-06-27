@@ -43,6 +43,50 @@ class TestValidatePrUrl:
         with pytest.raises(ValueError):
             InputValidator.validate_pr_url("not-a-url")
 
+    def test_trailing_garbage_after_pr_number_raises(self):
+        with pytest.raises(ValidationError, match="Invalid GitHub PR URL"):
+            InputValidator.validate_pr_url("https://github.com/o/r/pull/1IGNORE")
+
+    def test_unknown_path_suffix_raises(self):
+        with pytest.raises(ValidationError, match="Invalid GitHub PR URL"):
+            InputValidator.validate_pr_url("https://github.com/o/r/pull/1/unknown")
+
+    def test_files_suffix_accepted(self):
+        repo, number = InputValidator.validate_pr_url("https://github.com/o/r/pull/1/files")
+        assert repo == "o/r"
+        assert number == 1
+
+    def test_commits_suffix_accepted(self):
+        repo, number = InputValidator.validate_pr_url("https://github.com/o/r/pull/1/commits")
+        assert repo == "o/r"
+        assert number == 1
+
+    def test_query_string_accepted(self):
+        repo, number = InputValidator.validate_pr_url("https://github.com/o/r/pull/1?diff=split")
+        assert repo == "o/r"
+        assert number == 1
+
+    def test_fragment_accepted(self):
+        repo, number = InputValidator.validate_pr_url("https://github.com/o/r/pull/1#diff-abc")
+        assert repo == "o/r"
+        assert number == 1
+
+    def test_embedded_whitespace_raises(self):
+        with pytest.raises(ValidationError, match="whitespace"):
+            InputValidator.validate_pr_url("https://github.com/o/r/pull/1 extra")
+
+    def test_newline_in_url_raises(self):
+        with pytest.raises(ValidationError, match="whitespace"):
+            InputValidator.validate_pr_url("https://github.com/o/r/pull/1\ninjected")
+
+    def test_control_character_raises(self):
+        with pytest.raises(ValidationError, match="whitespace"):
+            InputValidator.validate_pr_url("https://github.com/o/r/pull/\x001")
+
+    def test_http_scheme_raises(self):
+        with pytest.raises(ValidationError, match="Invalid GitHub PR URL"):
+            InputValidator.validate_pr_url("http://github.com/o/r/pull/1")
+
 
 # ---------------------------------------------------------------------------
 # InputValidator.scrub_diff

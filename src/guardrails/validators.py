@@ -10,8 +10,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any
-
-GITHUB_PR_URL_RE = re.compile(r"https://github\.com/([^/]+/[^/]+)/pull/(\d+)")
+from urllib.parse import urlparse
 
 MAX_DIFF_BYTES = 102_400  # 100 KB
 _TRUNCATION_MARKER = "\n\n[diff truncated — exceeds 100 KB]"
@@ -24,6 +23,9 @@ _INJECTION_PATTERNS = [
     r"you are now",
 ]
 
+# Known-safe path segments that may follow /pull/<number>
+_ALLOWED_PR_SUFFIXES = frozenset({"files", "commits"})
+
 
 class ValidationError(ValueError):
     """Raised when input or output validation fails."""
@@ -34,13 +36,49 @@ class InputValidator:
 
     @staticmethod
     def validate_pr_url(url: str) -> tuple[str, int]:
-        """Validate a GitHub PR URL and return (repo_name, pr_number)."""
+        """Strictly validate a GitHub PR URL; return (repo_name, pr_number).
+
+        Rejects trailing garbage, unknown path suffixes, whitespace, and
+        control characters. Accepted forms:
+          https://github.com/<owner>/<repo>/pull/<number>
+          https://github.com/<owner>/<repo>/pull/<number>/files
+          https://github.com/<owner>/<repo>/pull/<number>/commits
+        Query strings and fragments are ignored (urlparse strips them).
+        """
         if not url or not isinstance(url, str):
             raise ValidationError("PR URL must be a non-empty string")
-        match = GITHUB_PR_URL_RE.match(url.strip())
-        if not match:
-            raise ValidationError(f"Invalid GitHub PR URL: {url}")
-        return match.group(1), int(match.group(2))
+
+        url = url.strip()
+
+        # Reject embedded whitespace or control characters anywhere in the URL.
+        if re.search(r"[\x00-\x20\x7f]", url):
+            raise ValidationError(
+                "Invalid GitHub PR URL: contains whitespace or control characters"
+            )
+
+        try:
+            parsed = urlparse(url)
+        except Exception as exc:
+            raise ValidationError(f"Invalid GitHub PR URL: {exc}") from exc
+
+        if parsed.scheme != "https" or parsed.netloc != "github.com":
+            raise ValidationError(f"Invalid GitHub PR URL: {url!r}")
+
+        # Path must be exactly: /<owner>/<repo>/pull/<number>[/(files|commits)]
+        segments = [s for s in parsed.path.split("/") if s]
+        if len(segments) < 4 or len(segments) > 5:
+            raise ValidationError(f"Invalid GitHub PR URL: {url!r}")
+
+        owner, repo, pull_kw, pr_num_str = segments[:4]
+        trailing = segments[4] if len(segments) == 5 else None
+
+        if not owner or not repo or pull_kw != "pull" or not pr_num_str.isdigit():
+            raise ValidationError(f"Invalid GitHub PR URL: {url!r}")
+
+        if trailing is not None and trailing not in _ALLOWED_PR_SUFFIXES:
+            raise ValidationError(f"Invalid GitHub PR URL: {url!r}")
+
+        return f"{owner}/{repo}", int(pr_num_str)
 
     @staticmethod
     def scrub_diff(diff: str) -> str:

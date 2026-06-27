@@ -52,7 +52,7 @@ def get_pr_metadata(url: str) -> PRMetadata:
     diff = InputValidator.scrub_diff(diff)
 
     return PRMetadata(
-        url=url,
+        url=f"https://github.com/{repo_name}/pull/{pr_number}",
         repo=repo_name,
         pr_number=pr_number,
         title=pr.title,

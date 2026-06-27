@@ -176,6 +176,17 @@ class TestGetPrMetadata:
         assert result.description == ""
 
     @patch.dict(os.environ, {"GITHUB_TOKEN": "ghp_fake"})
+    def test_url_stored_as_canonical_form(self):
+        """Raw user URL (possibly with /files suffix) must not reach PRMetadata.url."""
+        from src.tools.github import get_pr_metadata
+
+        with patch("src.tools.github.Github") as mock_gh_cls:
+            mock_gh_cls.return_value.get_repo.return_value.get_pull.return_value = _make_mock_pr()
+            result = get_pr_metadata("https://github.com/owner/repo/pull/42/files")
+
+        assert result.url == "https://github.com/owner/repo/pull/42"
+
+    @patch.dict(os.environ, {"GITHUB_TOKEN": "ghp_fake"})
     def test_multi_file_diff_concatenated(self):
         from src.tools.github import get_pr_metadata
 
