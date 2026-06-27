@@ -38,8 +38,7 @@ DATASET_DIR = Path(__file__).parent / "evals" / "dataset"
 
 BANNER = """
 ╔══════════════════════════════════════════════════════════════╗
-║          Agentic PR Review Pipeline — Team 4 Demo           ║
-║   Najeeb · Amir · Erez · Avichay · Michael  |  June 2026   ║
+║              Agentic PR Review Pipeline — Demo              ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -247,18 +246,31 @@ def run_demo(pr_url: str | None = None) -> None:
 
     # ── Agent 2: Reviewer ────────────────────────────────────────────────────
     from agno.models.litellm import LiteLLM
+    from src.pipeline import _CHANGE_TYPE_TOPICS
+    from src.tools.team_brain import get_team_standards
     model_id = RISK_MODEL_MAP[classification.risk_level.value]
-    reviewer_agent.model = LiteLLM(id=model_id, top_p=None)
+    reviewer_agent.model = LiteLLM(id=model_id, top_p=None, temperature=1)
+
+    topics = {t for ct in classification.change_types
+              for t in _CHANGE_TYPE_TOPICS.get(ct.value, [])}
+    standards = get_team_standards(sorted(topics)) if topics else []
+    standards_text = "\n\n---\n\n".join(standards) if standards else "(none)"
 
     console.print(f"\n[bold dim]▶ Running Agent 2 · Reviewer  [{model_id}]…[/bold dim]")
     t0 = time.perf_counter()
     findings_result = reviewer_agent.run(
         f"Metadata: {meta.model_dump_json()}\n"
-        f"Classification: {classification.model_dump_json()}"
+        f"Classification: {classification.model_dump_json()}\n"
+        f"Applicable Standards:\n{standards_text}"
     )
     findings = findings_result.content
     if isinstance(findings, str):
-        findings = ReviewFindings.model_validate_json(findings)
+        from src.utils import extract_json
+        findings = ReviewFindings.model_validate_json(extract_json(findings))
+    elif isinstance(findings, dict):
+        findings = ReviewFindings.model_validate(findings)
+    elif not isinstance(findings, ReviewFindings):
+        raise ValueError(f"Reviewer returned unexpected type: {type(findings).__name__}")
     state.findings = findings
     _show_findings(findings, time.perf_counter() - t0)
 
@@ -293,7 +305,6 @@ if __name__ == "__main__":
         run_demo(pr_url=args.live)
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted.[/yellow]")
-        sys.exit(0)
     except Exception as e:
-        console.print(f"\n[red]Error:[/red] {e}")
-        raise
+        console.print(f"\n[bold red]Error:[/bold red] {e}")
+        sys.exit(1)
