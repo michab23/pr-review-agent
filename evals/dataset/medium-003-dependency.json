@@ -1,9 +1,12 @@
 {
   "id": "medium-003",
-  "description": "Add httpx and tenacity dependencies for retry logic",
-  "pr_diff": "diff --git a/pyproject.toml b/pyproject.toml\nindex b2c3d4e..c3d4e5f 100644\n--- a/pyproject.toml\n+++ b/pyproject.toml\n@@ -6,6 +6,8 @@ dependencies = [\n     \"agno>=1.0\",\n     \"litellm>=1.0\",\n+    \"httpx>=0.27\",\n+    \"tenacity>=8.0\",\n     \"langfuse>=2.0\",\n     \"pydantic>=2.0\",\ndiff --git a/src/tools/github.py b/src/tools/github.py\nindex a1b2c3d..b2c3d4e 100644\n--- a/src/tools/github.py\n+++ b/src/tools/github.py\n@@ -1,6 +1,8 @@\n import os\n import re\n+import httpx\n+from tenacity import retry, stop_after_attempt, wait_exponential\n from github import Github\n from src.models import PRMetadata\n \n+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))\n def get_pr_metadata(url: str) -> PRMetadata:\n     \"\"\"Fetch PR metadata and diff from GitHub. Rejects diffs > 100KB.\"\"\"\n",
+  "description": "Add httpx and tenacity dependencies for retry logic on GitHub API calls",
+  "pr_diff": "diff --git a/pyproject.toml b/pyproject.toml\nindex b2c3d4e..c3d4e5f 100644\n--- a/pyproject.toml\n+++ b/pyproject.toml\n@@ -6,6 +6,8 @@ dependencies = [\n     \"agno>=1.0\",\n     \"litellm>=1.0\",\n+    \"httpx>=0.27\",\n+    \"tenacity>=8.0\",\n     \"langfuse>=2.0\",\n     \"pydantic>=2.0\",\ndiff --git a/src/tools/github.py b/src/tools/github.py\nindex a1b2c3d..b2c3d4e 100644\n--- a/src/tools/github.py\n+++ b/src/tools/github.py\n@@ -1,6 +1,10 @@\n import os\n import re\n+import httpx\n+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type\n from github import Github\n from src.models import PRMetadata\n \n+@retry(\n+    stop=stop_after_attempt(3),\n+    wait=wait_exponential(multiplier=1, min=1, max=10),\n+    retry=retry_if_exception_type((httpx.TimeoutException, httpx.NetworkError)),\n+)\n def get_pr_metadata(url: str) -> PRMetadata:\n     \"\"\"Fetch PR metadata and diff from GitHub. Rejects diffs > 100KB.\"\"\"\n+\n+\n+def post_review_comment(repo: str, pr_number: int, body: str) -> str:\n+    \"\"\"Post a review comment using httpx directly (bypasses PyGithub rate limiter).\"\"\"\n+    token = os.environ[\"GITHUB_TOKEN\"]\n+    resp = httpx.post(\n+        f\"https://api.github.com/repos/{repo}/issues/{pr_number}/comments\",\n+        headers={\"Authorization\": f\"Bearer {token}\", \"Accept\": \"application/vnd.github+json\"},\n+        json={\"body\": body},\n+        timeout=15.0,\n+    )\n+    resp.raise_for_status()\n+    return resp.json()[\"html_url\"]\n",
   "files_changed": ["pyproject.toml", "src/tools/github.py"],
   "expected_risk_level": "medium",
-  "expected_change_types": ["dependency"],
-  "planted_issues": []
+  "expected_change_types": ["dependency", "feature"],
+  "planted_issues": [
+    "post_review_comment has no error handling beyond raise_for_status — 4xx/5xx responses will surface raw httpx errors to callers",
+    "Retry decorator applied to get_pr_metadata but not to post_review_comment — inconsistent retry strategy"
+  ]
 }

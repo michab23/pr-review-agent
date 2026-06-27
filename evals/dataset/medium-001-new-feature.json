@@ -1,14 +1,14 @@
 {
   "id": "medium-001",
   "description": "New user profile endpoint — feature without auth check, missing type hints",
-  "pr_diff": "diff --git a/src/api/users.py b/src/api/users.py\nnew file mode 100644\nindex 0000000..a1b2c3d\n--- /dev/null\n+++ b/src/api/users.py\n@@ -0,0 +1,42 @@\n+from fastapi import APIRouter\n+import os\n+import json\n+\n+router = APIRouter(prefix=\"/users\")\n+\n+USER_DB = {}\n+\n+@router.get(\"/{user_id}\")\n+def get_user(user_id):\n+    if user_id not in USER_DB:\n+        return {\"error\": \"not found\"}\n+    return USER_DB[user_id]\n+\n+@router.post(\"/\")\n+def create_user(data: dict):\n+    user_id = str(len(USER_DB) + 1)\n+    USER_DB[user_id] = {\n+        \"id\": user_id,\n+        \"name\": data.get(\"name\"),\n+        \"email\": data.get(\"email\"),\n+        \"role\": data.get(\"role\", \"user\"),\n+    }\n+    print(f\"Created user: {USER_DB[user_id]}\")\n+    return USER_DB[user_id]\n+\n+@router.delete(\"/{user_id}\")\n+def delete_user(user_id):\n+    if user_id not in USER_DB:\n+        return {\"error\": \"not found\"}\n+    del USER_DB[user_id]\n+    return {\"deleted\": user_id}\n+\n+@router.get(\"/admin/all\")\n+def list_all_users():\n+    # Returns all users — no auth check!\n+    return list(USER_DB.values())\n",
+  "pr_diff": "diff --git a/src/api/users.py b/src/api/users.py\nnew file mode 100644\nindex 0000000..a1b2c3d\n--- /dev/null\n+++ b/src/api/users.py\n@@ -0,0 +1,42 @@\n+from fastapi import APIRouter\n+import os\n+import json\n+\n+router = APIRouter(prefix=\"/users\")\n+\n+USER_DB = {}\n+\n+@router.get(\"/{user_id}\")\n+def get_user(user_id):\n+    if user_id not in USER_DB:\n+        return {\"error\": \"not found\"}\n+    return USER_DB[user_id]\n+\n+@router.post(\"/\")\n+def create_user(data: dict):\n+    user_id = str(len(USER_DB) + 1)\n+    USER_DB[user_id] = {\n+        \"id\": user_id,\n+        \"name\": data.get(\"name\"),\n+        \"email\": data.get(\"email\"),\n+        \"role\": data.get(\"role\", \"user\"),\n+    }\n+    print(f\"Created user: {USER_DB[user_id]}\")\n+    return USER_DB[user_id]\n+\n+@router.delete(\"/{user_id}\")\n+def delete_user(user_id):\n+    if user_id not in USER_DB:\n+        return {\"error\": \"not found\"}\n+    del USER_DB[user_id]\n+    return {\"deleted\": user_id}\n+\n+@router.get(\"/stats\")\n+def user_stats():\n+    # Returns aggregate counts — no auth check\n+    return {\"total_users\": len(USER_DB)}\n",
   "files_changed": ["src/api/users.py"],
   "expected_risk_level": "medium",
   "expected_change_types": ["feature"],
   "planted_issues": [
     "Missing type hints on all function parameters and return types (python.md § Type Hints)",
     "dict used as inter-component data contract instead of Pydantic model (python.md § Pydantic Models)",
-    "Admin endpoint /admin/all has no authentication check",
+    "Stats endpoint /stats has no authentication check",
     "In-memory USER_DB will lose all data on restart — not a persistent store"
   ]
 }
