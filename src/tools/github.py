@@ -1,20 +1,11 @@
 # GitHub API tools — see spec/spec.md §6 for endpoints and security requirements
 import os
-import re
 
 from github import Github
 from langfuse import observe
 
+from src.guardrails.validators import InputValidator
 from src.models import PRMetadata
-
-_INJECTION_PATTERNS = [
-    r"ignore previous instructions",
-    r"<\|im_start\|>",
-    r"<\|im_end\|>",
-    r"system prompt",
-    r"you are now",
-]
-_MAX_DIFF_BYTES = 102_400  # 100 KB
 
 
 @observe(name="get_pr_metadata", as_type="tool")
@@ -25,11 +16,7 @@ def get_pr_metadata(url: str) -> PRMetadata:
     token = os.environ["GITHUB_TOKEN"]
     gh = Github(token)
 
-    # Parse https://github.com/owner/repo/pull/N
-    match = re.match(r"https://github\.com/([^/]+/[^/]+)/pull/(\d+)", url)
-    if not match:
-        raise ValueError(f"Invalid GitHub PR URL: {url}")
-    repo_name, pr_number = match.group(1), int(match.group(2))
+    repo_name, pr_number = InputValidator.validate_pr_url(url)
 
     try:
         repo = gh.get_repo(repo_name)
@@ -62,11 +49,7 @@ def get_pr_metadata(url: str) -> PRMetadata:
         raise RuntimeError(f"GitHub API error {e.status}: {msg}") from None
     diff = "\n".join(diff_parts)
 
-    _TRUNCATION_MARKER = "\n\n[diff truncated — exceeds 100 KB]"
-    diff_bytes = diff.encode()
-    if len(diff_bytes) > _MAX_DIFF_BYTES:
-        keep = _MAX_DIFF_BYTES - len(_TRUNCATION_MARKER.encode("utf-8"))
-        diff = diff_bytes[:keep].decode("utf-8", errors="ignore") + _TRUNCATION_MARKER
+    diff = InputValidator.scrub_diff(diff)
 
     return PRMetadata(
         url=url,
@@ -83,11 +66,8 @@ def get_pr_metadata(url: str) -> PRMetadata:
 
 @observe(name="validate_diff", as_type="tool")
 def validate_diff(diff: str) -> str:
-    """Strip prompt injection patterns from a PR diff before it reaches any LLM."""
-    cleaned = diff
-    for pattern in _INJECTION_PATTERNS:
-        cleaned = re.sub(pattern, "[REDACTED]", cleaned, flags=re.IGNORECASE)
-    return cleaned
+    """Scrub a PR diff before it reaches any LLM. Delegates to InputValidator."""
+    return InputValidator.scrub_diff(diff)
 
 
 @observe(name="post_pr_comment", as_type="tool")

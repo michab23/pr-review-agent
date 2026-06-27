@@ -25,6 +25,7 @@ try:
 except ImportError:
     reporter_agent = None
 
+from src.guardrails.validators import OutputValidator
 from src.models import ChangeType, PRClassification, PipelineState, ReviewFindings, RiskLevel
 from src.tools.github import get_pr_metadata, post_pr_comment, validate_diff
 from src.tools.team_brain import get_team_standards
@@ -176,6 +177,9 @@ def run(pr_url: str) -> PipelineState:
                 findings = raw_findings
             else:
                 raise TypeError(f"Unexpected reviewer output type: {type(raw_findings).__name__}")
+            findings = ReviewFindings.model_validate(
+                OutputValidator.clamp_confidence(findings.model_dump())
+            )
         except Exception as exc:
             console.print(f"[yellow]⚠ Reviewer unavailable ({exc}); using placeholder findings.[/yellow]")
             findings = _FALLBACK_FINDINGS

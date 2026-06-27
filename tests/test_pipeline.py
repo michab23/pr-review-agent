@@ -568,3 +568,50 @@ class TestReporterDegradation:
 
         warning_calls = " ".join(str(c) for c in mock_print.call_args_list)
         assert "reporter" in warning_calls.lower()
+
+
+# ---------------------------------------------------------------------------
+# TestConfidenceClamping — output guardrail applied after reviewer parsing
+# ---------------------------------------------------------------------------
+
+class TestConfidenceClamping:
+    def _run_with_confidence(self, confidence: float) -> PipelineState:
+        from src.pipeline import run
+
+        findings = ReviewFindings(
+            summary="test",
+            findings=[],
+            verdict="approve",
+            confidence=confidence,
+        )
+        mock_analyzer = MagicMock()
+        mock_analyzer.run.return_value = MagicMock(content=_fake_classification())
+        mock_reviewer = MagicMock()
+        mock_reviewer.run.return_value = MagicMock(content=findings)
+        mock_reviewer.model = None
+        mock_reporter = MagicMock()
+        mock_reporter.run.return_value = MagicMock(content="## Review")
+
+        with (
+            patch("src.pipeline.get_pr_metadata", return_value=_fake_metadata()),
+            patch("src.pipeline.validate_diff", side_effect=lambda d: d),
+            patch("src.pipeline.analyzer_agent", mock_analyzer),
+            patch("src.pipeline.reviewer_agent", mock_reviewer),
+            patch("src.pipeline.reporter_agent", mock_reporter),
+            patch("src.pipeline.human_approval_gate", return_value=False),
+            patch("src.pipeline.log_structured_trace"),
+            patch("src.pipeline.langfuse"),
+        ):
+            return run("https://github.com/acme/repo/pull/7")
+
+    def test_confidence_above_1_clamped(self):
+        state = self._run_with_confidence(1.5)
+        assert state.findings.confidence == 1.0
+
+    def test_confidence_below_0_clamped(self):
+        state = self._run_with_confidence(-0.3)
+        assert state.findings.confidence == 0.0
+
+    def test_in_range_confidence_unchanged(self):
+        state = self._run_with_confidence(0.85)
+        assert state.findings.confidence == 0.85
