@@ -25,6 +25,7 @@ try:
 except ImportError:
     reporter_agent = None
 
+from src.constants import CHANGE_TYPE_TOPICS as _CHANGE_TYPE_TOPICS
 from src.guardrails.validators import OutputValidator
 from src.models import ChangeType, PRClassification, PipelineState, ReviewFindings, RiskLevel
 from src.tools.github import get_pr_metadata, post_pr_comment, validate_diff
@@ -87,17 +88,6 @@ def _reporter_fallback(findings: ReviewFindings) -> str:
         "The Reporter agent failed. Raw findings are shown below.\n\n"
         f"```json\n{findings.model_dump_json(indent=2)}\n```"
     )
-
-
-_CHANGE_TYPE_TOPICS = {
-    "feature": ["python", "testing"],
-    "bug_fix": ["python", "testing"],
-    "refactor": ["python"],
-    "security": ["security", "python"],
-    "docs": [],
-    "config": ["git"],
-    "dependency": ["security"],
-}
 
 
 def human_approval_gate(state: PipelineState) -> bool:

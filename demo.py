@@ -246,7 +246,7 @@ def run_demo(pr_url: str | None = None) -> None:
 
     # ── Agent 2: Reviewer ────────────────────────────────────────────────────
     from agno.models.litellm import LiteLLM
-    from src.pipeline import _CHANGE_TYPE_TOPICS
+    from src.constants import CHANGE_TYPE_TOPICS as _CHANGE_TYPE_TOPICS
     from src.tools.team_brain import get_team_standards
     model_id = RISK_MODEL_MAP[classification.risk_level.value]
     reviewer_agent.model = LiteLLM(id=model_id, top_p=None, temperature=1)
