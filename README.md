@@ -4,8 +4,7 @@ Multi-agent system that reviews GitHub pull requests against team coding standar
 and posts a structured comment — with a human-in-the-loop approval gate before anything
 is posted.
 
-Built for the Tikal LLM Engineering Course · Capstone Project · Team 4
-(Najeeb, Amir, Erez, Avichay, Michael)
+Built for the Tikal LLM Engineering Course · Capstone Project
 
 ---
 
@@ -128,13 +127,13 @@ uv run python demo.py
 ### Demo (live GitHub PR)
 
 ```bash
-uv run python demo.py --live https://github.com/owner/repo/pull/123
+uv run python demo.py --live https://github.com/michab23/pr-review-agent/pull/8
 ```
 
 ### Production pipeline
 
 ```bash
-uv run python -m src.pipeline https://github.com/owner/repo/pull/123
+uv run python -m src.pipeline https://github.com/michab23/pr-review-agent/pull/8
 ```
 
 Prompts for approval before posting. Times out after 60 s.
