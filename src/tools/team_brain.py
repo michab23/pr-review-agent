@@ -6,11 +6,13 @@ import sys
 from pathlib import Path
 
 import httpx
+from langfuse import observe
 
 _STANDARDS_DIR = Path(__file__).parent.parent / "team_brain" / "standards"
 _DEFAULT_URL = "http://127.0.0.1:8000/sse"
 
 
+@observe(name="get_team_standards", as_type="tool")
 def get_team_standards(topics: list[str]) -> list[str]:
     """Retrieve coding standard excerpts from the Team Brain MCP server.
 

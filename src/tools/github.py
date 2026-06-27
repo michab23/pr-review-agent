@@ -3,6 +3,7 @@ import os
 import re
 
 from github import Github
+from langfuse import observe
 
 from src.models import PRMetadata
 
@@ -16,6 +17,7 @@ _INJECTION_PATTERNS = [
 _MAX_DIFF_BYTES = 102_400  # 100 KB
 
 
+@observe(name="get_pr_metadata", as_type="tool")
 def get_pr_metadata(url: str) -> PRMetadata:
     """Fetch PR metadata and diff from GitHub. Rejects diffs > 100KB."""
     from github import GithubException
@@ -79,6 +81,7 @@ def get_pr_metadata(url: str) -> PRMetadata:
     )
 
 
+@observe(name="validate_diff", as_type="tool")
 def validate_diff(diff: str) -> str:
     """Strip prompt injection patterns from a PR diff before it reaches any LLM."""
     cleaned = diff
@@ -87,6 +90,7 @@ def validate_diff(diff: str) -> str:
     return cleaned
 
 
+@observe(name="post_pr_comment", as_type="tool")
 def post_pr_comment(repo: str, pr_number: int, body: str) -> str:
     """Post a review comment to a GitHub PR. Returns the comment URL."""
     from github import GithubException

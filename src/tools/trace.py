@@ -3,11 +3,14 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from langfuse import observe
+
 from src.models import PipelineState
 
 TRACES_DIR = Path(__file__).parent.parent.parent / "traces"
 
 
+@observe(name="log_structured_trace", as_type="tool")
 def log_structured_trace(state: PipelineState) -> None:
     """Append one JSONL entry for this run to traces/YYYY-MM-DD.jsonl."""
     TRACES_DIR.mkdir(exist_ok=True)
