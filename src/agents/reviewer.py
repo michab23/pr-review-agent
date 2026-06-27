@@ -46,7 +46,7 @@ Return ONLY a valid JSON object — no markdown fences, no prose:
 
 from src.models import ReviewFindings
 
-# Model is overridden at runtime from PRClassification.model_to_use (see pipeline.py)
+# Model is overridden at runtime via RISK_MODEL_MAP[risk_level] in pipeline.py
 reviewer_agent = Agent(
     name="reviewer",
     model=LiteLLM(id="anthropic/claude-sonnet-4-6", top_p=None, temperature=1),
