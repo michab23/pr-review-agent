@@ -615,3 +615,37 @@ class TestConfidenceClamping:
     def test_in_range_confidence_unchanged(self):
         state = self._run_with_confidence(0.85)
         assert state.findings.confidence == 0.85
+
+    def test_non_numeric_confidence_clamped_without_degradation(self):
+        import json as _json
+        from src.pipeline import run
+
+        raw = _json.dumps({
+            "summary": "looks fine",
+            "findings": [],
+            "verdict": "approve",
+            "confidence": "high",
+        })
+        mock_analyzer = MagicMock()
+        mock_analyzer.run.return_value = MagicMock(content=_fake_classification())
+        mock_reviewer = MagicMock()
+        mock_reviewer.run.return_value = MagicMock(content=raw)
+        mock_reviewer.model = None
+        mock_reporter = MagicMock()
+        mock_reporter.run.return_value = MagicMock(content="## Review")
+
+        with (
+            patch("src.pipeline.get_pr_metadata", return_value=_fake_metadata()),
+            patch("src.pipeline.validate_diff", side_effect=lambda d: d),
+            patch("src.pipeline.analyzer_agent", mock_analyzer),
+            patch("src.pipeline.reviewer_agent", mock_reviewer),
+            patch("src.pipeline.reporter_agent", mock_reporter),
+            patch("src.pipeline.human_approval_gate", return_value=False),
+            patch("src.pipeline.log_structured_trace"),
+            patch("src.pipeline.langfuse"),
+        ):
+            state = run("https://github.com/acme/repo/pull/7")
+
+        assert state.findings.confidence == 0.0
+        assert state.degraded is False
+        assert "reviewer" not in state.agents_failed
