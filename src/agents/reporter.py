@@ -4,6 +4,7 @@ import json
 from agno.agent import Agent
 from agno.models.litellm import LiteLLM
 from langfuse import get_client, observe
+from src.utils import configure_model_backend, setup_langfuse_tracing
 
 REPORTER_SYSTEM_PROMPT = """\
 You are a technical writer formatting a code review for a GitHub PR comment.
@@ -53,7 +54,6 @@ if __name__ == "__main__":
     import sys
     from dotenv import load_dotenv
     load_dotenv()
-    from src.utils import configure_model_backend, setup_langfuse_tracing
     configure_model_backend()
     tracing_enabled = False
     try:

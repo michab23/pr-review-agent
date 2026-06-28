@@ -2,6 +2,7 @@
 from agno.agent import Agent
 from agno.models.litellm import LiteLLM
 from langfuse import get_client, observe
+from src.utils import configure_model_backend, setup_langfuse_tracing
 
 REVIEWER_SYSTEM_PROMPT = """\
 You are a senior code reviewer. You review pull requests against the team's coding standards.
@@ -85,7 +86,6 @@ if __name__ == "__main__":
     import sys
     from dotenv import load_dotenv
     load_dotenv()
-    from src.utils import configure_model_backend, setup_langfuse_tracing
     configure_model_backend()
     tracing_enabled = False
     try:

@@ -2,6 +2,7 @@
 from agno.agent import Agent
 from agno.models.litellm import LiteLLM
 from langfuse import get_client, observe
+from src.utils import configure_model_backend, setup_langfuse_tracing
 
 ANALYZER_SYSTEM_PROMPT = """\
 You are a PR risk classifier. Given a pull request diff and metadata, your job is to:
@@ -79,7 +80,6 @@ if __name__ == "__main__":
     import sys
     from dotenv import load_dotenv
     load_dotenv()
-    from src.utils import configure_model_backend, setup_langfuse_tracing
     configure_model_backend()
     tracing_enabled = False
     try:
