@@ -31,9 +31,10 @@ from src.models import ChangeType, PRClassification, PipelineState, ReviewFindin
 from src.tools.github import get_pr_metadata, post_pr_comment, validate_diff
 from src.tools.team_brain import get_team_standards
 from src.tools.trace import log_structured_trace
-from src.utils import extract_json as _extract_json, setup_langfuse_tracing
+from src.utils import configure_model_backend, extract_json as _extract_json, setup_langfuse_tracing
 
 load_dotenv()
+configure_model_backend()
 
 console = Console()
 langfuse = get_client()

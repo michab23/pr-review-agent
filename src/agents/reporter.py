@@ -53,9 +53,10 @@ if __name__ == "__main__":
     import sys
     from dotenv import load_dotenv
     load_dotenv()
+    from src.utils import configure_model_backend, setup_langfuse_tracing
+    configure_model_backend()
     tracing_enabled = False
     try:
-        from src.utils import setup_langfuse_tracing
         setup_langfuse_tracing()
         tracing_enabled = True
     except RuntimeError:

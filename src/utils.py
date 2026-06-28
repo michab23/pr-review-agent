@@ -10,6 +10,19 @@ _instrumented = False
 extract_json = OutputValidator.extract_json
 
 
+def configure_model_backend() -> None:
+    """Apply USE_LITELLM_PROXY toggle. Call once after load_dotenv(), before any agent runs."""
+    if os.getenv("USE_LITELLM_PROXY", "false").lower() in ("1", "true", "yes"):
+        proxy_url = os.environ.get("LITELLM_PROXY_URL", "")
+        proxy_key = os.environ.get("LITELLM_PROXY_KEY", "")
+        if proxy_url:
+            os.environ["ANTHROPIC_BASE_URL"] = proxy_url
+        if proxy_key:
+            os.environ["ANTHROPIC_API_KEY"] = proxy_key
+    else:
+        os.environ.pop("ANTHROPIC_BASE_URL", None)
+
+
 def setup_langfuse_tracing() -> None:
     """Initialise LangFuse SDK from env vars. Call once in __main__ before any agent runs."""
     global _instrumented
