@@ -1,0 +1,25 @@
+{
+    "feature": "004-github-app-trigger",
+    "created": "2026-06-27T00:00:00+00:00",
+    "tasks": {
+        "T001": {"id": "T001", "description": "Add fastapi and uvicorn to pyproject.toml", "files": "pyproject.toml", "mode": "ASYNC", "status": "pending"},
+        "T002": {"id": "T002", "description": "Create src/webhook/ package with __init__.py and __main__.py", "files": "src/webhook/__init__.py src/webhook/__main__.py", "mode": "ASYNC", "status": "pending"},
+        "T003": {"id": "T003", "description": "Create tests/webhook/ test package with __init__.py", "files": "tests/webhook/__init__.py", "mode": "ASYNC", "status": "pending"},
+        "T004": {"id": "T004", "description": "Add skip_hitl and stop_event params to run() in src/pipeline.py", "files": "src/pipeline.py", "mode": "SYNC", "status": "pending"},
+        "T005": {"id": "T005", "description": "Implement HMAC-SHA256 signature verifier in src/webhook/signature.py", "files": "src/webhook/signature.py", "mode": "SYNC", "status": "pending"},
+        "T006": {"id": "T006", "description": "Implement event filter and deduplication in src/webhook/event_filter.py", "files": "src/webhook/event_filter.py", "mode": "ASYNC", "status": "pending"},
+        "T007": {"id": "T007", "description": "Implement async task runner with cancellation in src/webhook/runner.py", "files": "src/webhook/runner.py", "mode": "SYNC", "status": "pending"},
+        "T008": {"id": "T008", "description": "Implement FastAPI webhook server in src/webhook/server.py", "files": "src/webhook/server.py", "mode": "SYNC", "status": "pending"},
+        "T009": {"id": "T009", "description": "Unit tests for signature verifier in tests/webhook/test_signature.py", "files": "tests/webhook/test_signature.py", "mode": "SYNC", "status": "pending"},
+        "T010": {"id": "T010", "description": "Unit tests for event filter in tests/webhook/test_event_filter.py", "files": "tests/webhook/test_event_filter.py", "mode": "ASYNC", "status": "pending"},
+        "T011": {"id": "T011", "description": "Unit tests for runner cancellation in tests/webhook/test_runner.py", "files": "tests/webhook/test_runner.py", "mode": "SYNC", "status": "pending"},
+        "T012": {"id": "T012", "description": "Add installation event handling to src/webhook/server.py", "files": "src/webhook/server.py", "mode": "ASYNC", "status": "pending"},
+        "T013": {"id": "T013", "description": "Test GET /health active_runs in tests/webhook/test_server.py", "files": "tests/webhook/test_server.py", "mode": "ASYNC", "status": "pending"},
+        "T014": {"id": "T014", "description": "Add ALLOWED_REPOS filtering to src/webhook/event_filter.py", "files": "src/webhook/event_filter.py", "mode": "ASYNC", "status": "pending"},
+        "T015": {"id": "T015", "description": "Unit tests for ALLOWED_REPOS filtering in tests/webhook/test_event_filter.py", "files": "tests/webhook/test_event_filter.py", "mode": "ASYNC", "status": "pending"},
+        "T016": {"id": "T016", "description": "Add tests/webhook/conftest.py with env var loading fixture", "files": "tests/webhook/conftest.py", "mode": "ASYNC", "status": "pending"},
+        "T017": {"id": "T017", "description": "Update module docstring in src/pipeline.py to reference new plan", "files": "src/pipeline.py", "mode": "ASYNC", "status": "pending"},
+        "T018": {"id": "T018", "description": "Validate quickstart.md end-to-end with ngrok and real GitHub App", "files": "specs/004-github-app-trigger/quickstart.md", "mode": "ASYNC", "status": "pending"},
+        "T019": {"id": "T019", "description": "Add structured logging to src/webhook/server.py and runner.py", "files": "src/webhook/server.py src/webhook/runner.py", "mode": "ASYNC", "status": "pending"}
+    }
+}

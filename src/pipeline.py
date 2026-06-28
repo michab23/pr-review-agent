@@ -1,7 +1,8 @@
-# Pipeline entry point — see specs/003-agent-independence/plan.md for agent wiring, HITL, and graceful-degradation behavior
+# Pipeline entry point — see specs/004-github-app-trigger/plan.md for agent wiring, HITL, and graceful-degradation behavior
 import json
 import select
 import sys
+import threading
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -104,7 +105,20 @@ def human_approval_gate(state: PipelineState) -> bool:
 
 
 @observe(name="pr_review_pipeline")
-def run(pr_url: str) -> PipelineState:
+def run(
+    pr_url: str,
+    *,
+    skip_hitl: bool = False,
+    stop_event: threading.Event | None = None,
+) -> PipelineState:
+    """Run the three-agent PR review pipeline.
+
+    skip_hitl: when True, bypasses the human approval gate and skips
+        post_pr_comment() — the caller (runner.py) is responsible for posting
+        state.draft_comment via the GitHub App installation token.
+    stop_event: cooperative cancellation flag checked after each agent block;
+        sets state.error='cancelled' and returns early when set.
+    """
     state = PipelineState(pr_url=pr_url, run_id=str(uuid4()))
 
     try:
@@ -133,6 +147,9 @@ def run(pr_url: str) -> PipelineState:
             state.agents_failed.append("analyzer")
         state.metadata = metadata
         state.classification = classification
+        if stop_event and stop_event.is_set():
+            state.error = "cancelled"
+            return state
 
         # Agent 2: Reviewer — model tier resolved from risk level at runtime
         try:
@@ -175,6 +192,9 @@ def run(pr_url: str) -> PipelineState:
             if "reviewer" not in state.agents_failed:
                 state.agents_failed.append("reviewer")
         state.findings = findings
+        if stop_event and stop_event.is_set():
+            state.error = "cancelled"
+            return state
 
         # Agent 3: Reporter — produces draft comment
         try:
@@ -197,33 +217,44 @@ def run(pr_url: str) -> PipelineState:
             if "reporter" not in state.agents_failed:
                 state.agents_failed.append("reporter")
 
-        # HITL gate
-        approved = human_approval_gate(state)
-        try:
-            langfuse.score_current_trace(name="human-approval", value=1 if approved else 0)
-        except Exception:
-            pass
-
-        if not approved:
-            state.human_approved = False
-            log_structured_trace(state)
-            console.print("[red]Aborted — nothing posted.[/red]")
-            langfuse.flush()
+        if stop_event and stop_event.is_set():
+            state.error = "cancelled"
             return state
 
-        state.posted_comment_url = post_pr_comment(
-            state.metadata.repo, state.metadata.pr_number, state.draft_comment
-        )
-        state.human_approved = True
-        log_structured_trace(state)
+        # HITL gate (CLI path only; bypassed when skip_hitl=True)
+        if not skip_hitl:
+            approved = human_approval_gate(state)
+            try:
+                langfuse.score_current_trace(name="human-approval", value=1 if approved else 0)
+            except Exception:
+                pass
 
-        risk = state.classification.risk_level.value
-        n = len(state.findings.findings)
-        cost = state.total_cost_usd
-        console.print(
-            f"✓ Run {state.run_id} | Risk: {risk} | Findings: {n} | "
-            f"Cost: ${cost:.4f} | Status: posted"
-        )
+            if not approved:
+                state.human_approved = False
+                log_structured_trace(state)
+                console.print("[red]Aborted — nothing posted.[/red]")
+                langfuse.flush()
+                return state
+
+            state.posted_comment_url = post_pr_comment(
+                state.metadata.repo, state.metadata.pr_number, state.draft_comment
+            )
+            state.human_approved = True
+            log_structured_trace(state)
+
+            risk = state.classification.risk_level.value
+            n = len(state.findings.findings)
+            cost = state.total_cost_usd
+            console.print(
+                f"✓ Run {state.run_id} | Risk: {risk} | Findings: {n} | "
+                f"Cost: ${cost:.4f} | Status: posted"
+            )
+        else:
+            # Automated path: skip HITL and skip posting.
+            # Caller (runner.py) posts draft_comment via the GitHub App installation token.
+            state.human_approved = True
+            log_structured_trace(state)
+
         langfuse.flush()
 
     except Exception as e:
