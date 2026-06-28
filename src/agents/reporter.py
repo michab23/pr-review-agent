@@ -14,6 +14,21 @@ def _strip_preamble(content: str) -> str:
     return content
 
 
+_FOOTER_MARKERS = ("run id", "langfuse", "### run metadata", "<sub>")
+
+
+def _strip_footer(content: str) -> str:
+    """Remove run-metadata footer lines the model appends despite instructions."""
+    lines = content.splitlines()
+    for i in range(len(lines) - 1, -1, -1):
+        low = lines[i].strip().lower()
+        if any(marker in low for marker in _FOOTER_MARKERS):
+            lines = lines[:i]
+        else:
+            break
+    return "\n".join(lines).rstrip()
+
+
 REPORTER_SYSTEM_PROMPT = """\
 You are a technical writer formatting a code review for a GitHub PR comment.
 
@@ -21,7 +36,9 @@ Given the review findings, produce a clear, structured markdown comment that:
 1. Opens with a one-sentence verdict summary
 2. Lists each finding with its severity, file, line range, issue, cited standard, and fix
 
-Output ONLY the markdown comment — no preamble, no explanation, no text before the first line of markdown.\
+Rules:
+- Output ONLY the markdown comment — no preamble, no explanation before the first line of markdown
+- Do NOT include run metadata, run IDs, cost figures, LangFuse trace links, or any footer section\
 """
 
 reporter_agent = Agent(
@@ -46,7 +63,7 @@ def run_standalone(payload: dict) -> str:
     result = reporter_agent.run(prompt)
     content = result.content
     if isinstance(content, str):
-        return _strip_preamble(content)
+        return _strip_footer(_strip_preamble(content))
     if isinstance(content, dict):
         return json.dumps(content, indent=2)
     if hasattr(content, "model_dump_json"):

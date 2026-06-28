@@ -92,6 +92,21 @@ def _strip_preamble(content: str) -> str:
     return content
 
 
+_FOOTER_MARKERS = ("run id", "langfuse", "### run metadata", "<sub>")
+
+
+def _strip_footer(content: str) -> str:
+    """Remove run-metadata footer lines the model appends despite instructions."""
+    lines = content.splitlines()
+    for i in range(len(lines) - 1, -1, -1):
+        low = lines[i].strip().lower()
+        if any(marker in low for marker in _FOOTER_MARKERS):
+            lines = lines[:i]
+        else:
+            break
+    return "\n".join(lines).rstrip()
+
+
 def _reporter_fallback(findings: ReviewFindings) -> str:
     return (
         "## ⚠️ Reporter Unavailable\n\n"
@@ -216,7 +231,7 @@ def run(
             content = draft_result.content
             if not isinstance(content, str):
                 raise TypeError(f"Reporter returned {type(content).__name__} instead of markdown string")
-            state.draft_comment = _strip_preamble(content)
+            state.draft_comment = _strip_footer(_strip_preamble(content))
         except Exception as exc:
             console.print(f"[yellow]⚠ Reporter unavailable ({exc}); showing raw findings.[/yellow]")
             state.draft_comment = _reporter_fallback(state.findings)
