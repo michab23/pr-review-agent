@@ -13,6 +13,7 @@ from src.webhook.signature import verify_signature
 logger = logging.getLogger(__name__)
 
 _WEBHOOK_SECRET: str = ""
+_MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 @asynccontextmanager
@@ -33,6 +34,10 @@ app = FastAPI(title="PR Review Webhook", lifespan=lifespan)
 @app.post("/webhook")
 async def webhook(request: Request) -> dict:
     body_bytes = await request.body()
+    if len(body_bytes) > _MAX_BODY_BYTES:
+        logger.warning("rejected oversized webhook payload (%d bytes)", len(body_bytes))
+        return Response(content='{"error":"payload too large"}', status_code=413,
+                        media_type="application/json")
     sig_header = request.headers.get("x-hub-signature-256")
 
     if not verify_signature(body_bytes, _WEBHOOK_SECRET, sig_header):

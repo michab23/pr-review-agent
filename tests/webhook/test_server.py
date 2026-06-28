@@ -112,6 +112,17 @@ def test_webhook_draft_pr_ignored(client):
     assert resp.json()["status"] == "ignored"
 
 
+def test_webhook_oversized_payload_rejected(client):
+    body = b"x" * (10 * 1024 * 1024 + 1)
+    resp = client.post("/webhook",
+                       content=body,
+                       headers={"x-hub-signature-256": _make_sig(body),
+                                "x-github-event": "pull_request",
+                                "x-github-delivery": "delivery-big",
+                                "content-type": "application/json"})
+    assert resp.status_code == 413
+
+
 def test_webhook_valid_pr_accepted(client):
     body = json.dumps(_pr_body("opened")).encode()
     with patch("src.webhook.server.asyncio") as mock_asyncio:
