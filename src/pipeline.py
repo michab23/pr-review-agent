@@ -83,6 +83,15 @@ _FALLBACK_FINDINGS = ReviewFindings(
 )
 
 
+def _strip_preamble(content: str) -> str:
+    """Drop any model preamble before the first markdown heading or horizontal rule."""
+    for i, line in enumerate(content.splitlines()):
+        stripped = line.strip()
+        if stripped.startswith("#") or stripped == "---":
+            return "\n".join(content.splitlines()[i:])
+    return content
+
+
 def _reporter_fallback(findings: ReviewFindings) -> str:
     return (
         "## ⚠️ Reporter Unavailable\n\n"
@@ -202,14 +211,12 @@ def run(
                 raise ImportError("reporter module not available")
             draft_result = reporter_agent.run(
                 f"Metadata: {state.metadata.model_dump_json()}\n"
-                f"Findings: {state.findings.model_dump_json()}\n"
-                f"Run ID: {state.run_id}\n"
-                f"Cost USD: {state.total_cost_usd:.4f}"
+                f"Findings: {state.findings.model_dump_json()}"
             )
             content = draft_result.content
             if not isinstance(content, str):
                 raise TypeError(f"Reporter returned {type(content).__name__} instead of markdown string")
-            state.draft_comment = content
+            state.draft_comment = _strip_preamble(content)
         except Exception as exc:
             console.print(f"[yellow]⚠ Reporter unavailable ({exc}); showing raw findings.[/yellow]")
             state.draft_comment = _reporter_fallback(state.findings)
