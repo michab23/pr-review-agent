@@ -38,21 +38,22 @@ class TestSetupLangfuseTracing:
 
 
 class TestConfigureModelBackend:
-    def test_proxy_enabled_sets_base_url(self, monkeypatch):
+    def test_proxy_enabled_sets_both_env_vars(self, monkeypatch):
         monkeypatch.setenv("USE_LITELLM_PROXY", "true")
         monkeypatch.setenv("LITELLM_PROXY_URL", "https://proxy.example.com")
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-real-key")
+        monkeypatch.setenv("LITELLM_PROXY_KEY", "sk-proxy-key")
         monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
 
         from src.utils import configure_model_backend
         configure_model_backend()
 
         assert os.environ["ANTHROPIC_BASE_URL"] == "https://proxy.example.com"
-        assert os.environ["ANTHROPIC_API_KEY"] == "sk-real-key"  # unchanged
+        assert os.environ["ANTHROPIC_API_KEY"] == "sk-proxy-key"
 
     def test_proxy_enabled_empty_url_does_not_set_base_url(self, monkeypatch):
         monkeypatch.setenv("USE_LITELLM_PROXY", "true")
         monkeypatch.setenv("LITELLM_PROXY_URL", "")
+        monkeypatch.setenv("LITELLM_PROXY_KEY", "sk-proxy-key")
         monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
 
         from src.utils import configure_model_backend
