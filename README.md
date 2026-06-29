@@ -115,6 +115,42 @@ and prints a warning — reviews still complete.
 
 ---
 
+### GitHub App webhook server (auto-trigger on PR creation)
+
+The pipeline can be triggered automatically when a PR is opened, pushed to, or marked
+ready-for-review — no manual command needed. This requires a GitHub App installation
+and a public HTTPS endpoint (e.g. via ngrok for local dev).
+
+```bash
+# Terminal 2 — webhook server (defaults to port 8080 to avoid MCP conflict)
+uv run python -m src.webhook
+
+# Or on a custom port
+PORT=9000 uv run python -m src.webhook
+```
+
+Add to `.env`:
+```
+GITHUB_APP_ID=123456
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----
+...
+-----END RSA PRIVATE KEY-----"
+GITHUB_WEBHOOK_SECRET=your-random-secret-here
+```
+
+Full setup (GitHub App creation, ngrok, installation): see
+[specs/004-github-app-trigger/quickstart.md](specs/004-github-app-trigger/quickstart.md).
+
+When a non-draft PR is opened the server will:
+1. Post "🤖 AI review in progress…" on the PR
+2. Run the 3-agent pipeline (HITL gate skipped — automated path)
+3. Replace the placeholder with the full review comment
+
+A new push to an open PR cancels any in-flight run and starts fresh.
+Optional: set `ALLOWED_REPOS=owner/repo1,owner/repo2` to restrict which repositories trigger the pipeline.
+
+---
+
 ### Demo (offline, no GitHub token needed)
 
 Runs the full 3-agent pipeline against a canned high-risk PR from the eval dataset.
@@ -193,6 +229,12 @@ src/
     trace.py          # Structured JSONL trace writer (degraded flag included)
   team_brain/
     standards/        # security.md, python.md, testing.md, git.md
+  webhook/
+    server.py         # FastAPI app — POST /webhook, GET /health
+    runner.py         # Async task registry, at-most-one-run, cooperative cancellation
+    event_filter.py   # Action/draft/dedup/ALLOWED_REPOS filtering
+    signature.py      # HMAC-SHA256 webhook signature verification
+    __main__.py       # python -m src.webhook entrypoint (default port 8080)
   models.py           # Pydantic data models (PRMetadata, ReviewFindings, PipelineState, …)
   pipeline.py         # Entry point — wires agents, graceful degradation, HITL gate
 tests/
