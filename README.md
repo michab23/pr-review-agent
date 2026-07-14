@@ -4,7 +4,7 @@ Multi-agent system that reviews GitHub pull requests against team coding standar
 and posts a structured comment — with a human-in-the-loop approval gate before anything
 is posted.
 
-Built for the Tikal LLM Engineering Course · Capstone Project
+Built for the Agentic Engineer Program · Capstone Project
 
 ---
 
